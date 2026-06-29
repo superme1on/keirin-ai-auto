@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import sys
 from datetime import datetime
@@ -17,6 +18,7 @@ from common import (
     MODEL_PATH,
     METRICS_PATH,
     FEATURE_COLS,
+    OUTPUT_DIR,
     prepare_features,
     normalize_race_prob,
 )
@@ -37,9 +39,92 @@ def safe_auc(y, p):
         return None
 
 
+def get_stake_yen():
+    raw = os.getenv("BET_STAKE_YEN", "100").strip()
+    try:
+        stake = int(raw)
+    except ValueError:
+        stake = 100
+    return max(stake, 0)
+
+
+def summarize_strategy(name, bets):
+    if len(bets) == 0:
+        return {
+            "strategy": name,
+            "bets": 0,
+            "hits": 0,
+            "hit_rate": None,
+            "stake_yen": 0,
+            "win_return_yen": 0,
+            "loss_amount_yen": 0,
+            "profit_yen": 0,
+            "roi": None,
+        }
+
+    total_stake = float(bets["stake_yen"].sum())
+    total_return = float(bets["actual_return_yen"].sum())
+    loss_amount = float(bets.loc[~bets["is_hit"], "stake_yen"].sum())
+    profit = float(bets["actual_profit_yen"].sum())
+
+    return {
+        "strategy": name,
+        "bets": int(len(bets)),
+        "hits": int(bets["is_hit"].sum()),
+        "hit_rate": float(bets["is_hit"].mean()),
+        "stake_yen": int(total_stake),
+        "win_return_yen": int(total_return),
+        "loss_amount_yen": int(loss_amount),
+        "profit_yen": int(profit),
+        "roi": float(profit / total_stake) if total_stake else None,
+    }
+
+
+def write_backtest_outputs(test_df, test_prob, stake_yen):
+    backtest = test_df.copy()
+    backtest["p_raw"] = test_prob
+    backtest = normalize_race_prob(backtest)
+    backtest["odds_win"] = pd.to_numeric(backtest.get("odds_win", np.nan), errors="coerce")
+    backtest["expected_value_win"] = backtest["p_win"] * backtest["odds_win"] - 1
+    backtest["rank_in_race"] = backtest.groupby("race_id")["p_win"].rank(ascending=False, method="first").astype(int)
+    backtest["stake_yen"] = stake_yen
+    backtest["is_hit"] = pd.to_numeric(backtest["finish_pos"], errors="coerce").eq(1)
+    backtest["actual_return_yen"] = np.where(backtest["is_hit"], stake_yen * backtest["odds_win"], 0).round(0)
+    backtest["actual_profit_yen"] = backtest["actual_return_yen"] - stake_yen
+    backtest["loss_amount_yen"] = np.where(backtest["is_hit"], 0, stake_yen)
+    backtest["expected_profit_yen"] = (stake_yen * backtest["expected_value_win"]).round(0)
+
+    top1_bets = backtest[backtest["rank_in_race"] == 1].copy()
+    value_bets = backtest[backtest["expected_value_win"] > 0].copy()
+    summaries = [
+        summarize_strategy("top_p_win_each_race", top1_bets),
+        summarize_strategy("positive_expected_value_all", value_bets),
+    ]
+
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    backtest_cols = [
+        "date", "venue", "race_no", "race_id", "rank_in_race", "car_no",
+        "player_id", "finish_pos", "odds_win", "p_win", "expected_value_win",
+        "stake_yen", "is_hit", "actual_return_yen", "actual_profit_yen",
+        "loss_amount_yen", "expected_profit_yen",
+    ]
+    for c in backtest_cols:
+        if c not in backtest.columns:
+            backtest[c] = ""
+
+    backtest.sort_values(["date", "venue", "race_no", "rank_in_race"])[backtest_cols].to_csv(
+        OUTPUT_DIR / "latest_backtest.csv", index=False
+    )
+    pd.DataFrame(summaries).to_csv(OUTPUT_DIR / "backtest_summary.csv", index=False)
+    with open(OUTPUT_DIR / "backtest_summary.json", "w", encoding="utf-8") as f:
+        json.dump(summaries, f, ensure_ascii=False, indent=2)
+    return summaries
+
+
 def main():
     ensure_dirs()
     ensure_history()
+    stake_yen = get_stake_yen()
 
     df = pd.read_csv(HISTORY_CSV)
     required = {"race_id", "date", "finish_pos"}
@@ -99,6 +184,7 @@ def main():
 
     winner_probs = pred_df[pred_df["finish_pos"] == 1]["p_win"].clip(1e-9, 1.0)
     race_logloss = float(-np.log(winner_probs).mean()) if len(winner_probs) else None
+    backtest_summaries = write_backtest_outputs(test_df, test_prob, stake_yen)
 
     metrics = {
         "trained_at_jst": datetime.now(ZoneInfo("Asia/Tokyo")).isoformat(timespec="seconds"),
@@ -112,6 +198,8 @@ def main():
         "brier_score_binary": float(brier_score_loss(y_test, test_prob)) if len(test_df) else None,
         "auc_binary": safe_auc(y_test, test_prob),
         "race_logloss": race_logloss,
+        "stake_yen": stake_yen,
+        "backtest": backtest_summaries,
     }
 
     bundle = {

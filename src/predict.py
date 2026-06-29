@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import sys
 from datetime import datetime
@@ -17,6 +18,15 @@ from common import (
     prepare_features,
     normalize_race_prob,
 )
+
+
+def get_stake_yen():
+    raw = os.getenv("BET_STAKE_YEN", "100").strip()
+    try:
+        stake = int(raw)
+    except ValueError:
+        stake = 100
+    return max(stake, 0)
 
 
 def ensure_ready():
@@ -54,6 +64,7 @@ def make_trifecta_candidates(race_df: pd.DataFrame, top_k_riders=7, top_n=8):
 def main():
     ensure_dirs()
     ensure_ready()
+    stake_yen = get_stake_yen()
 
     bundle = joblib.load(MODEL_PATH)
     model = bundle["model"]
@@ -73,6 +84,11 @@ def main():
     pred["p_raw"] = np.clip(calibrated, 1e-6, 1.0)
     pred = normalize_race_prob(pred, "p_raw", "p_win")
     pred["expected_value_win"] = pred["p_win"] * pd.to_numeric(pred.get("odds_win", np.nan), errors="coerce") - 1
+    pred["stake_yen"] = stake_yen
+    pred["win_return_yen"] = (stake_yen * pd.to_numeric(pred.get("odds_win", np.nan), errors="coerce")).round(0)
+    pred["win_profit_yen"] = pred["win_return_yen"] - stake_yen
+    pred["loss_amount_yen"] = stake_yen
+    pred["expected_profit_yen"] = (stake_yen * pred["expected_value_win"]).round(0)
     pred["rank_in_race"] = pred.groupby("race_id")["p_win"].rank(ascending=False, method="first").astype(int)
 
     sort_cols = ["date", "venue", "race_no", "rank_in_race"]
@@ -85,7 +101,8 @@ def main():
     cols = [
         "date", "venue", "race_no", "race_id", "rank_in_race",
         "car_no", "player_id", "style", "score", "odds_win",
-        "p_win", "expected_value_win",
+        "p_win", "expected_value_win", "stake_yen", "win_return_yen",
+        "win_profit_yen", "loss_amount_yen", "expected_profit_yen",
     ]
     for c in cols:
         if c not in pred.columns:
@@ -151,6 +168,7 @@ def main():
         "html": str(html_path),
         "n_rows": int(len(pred)),
         "n_races": int(pred["race_id"].nunique()),
+        "stake_yen": stake_yen,
     }
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     print(pred[cols].head(30).to_string(index=False))

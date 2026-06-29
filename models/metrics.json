@@ -1,5 +1,5 @@
 {
-  "trained_at_jst": "2026-06-29T23:04:55+09:00",
+  "trained_at_jst": "2026-06-29T23:22:29+09:00",
   "model": "HistGradientBoostingClassifier + race probability normalization",
   "n_rows": 8400,
   "n_train": 5880,
@@ -22,5 +22,30 @@
   ],
   "brier_score_binary": 0.10148585986878819,
   "auc_binary": 0.8207580143352238,
-  "race_logloss": 1.4598697024791756
+  "race_logloss": 1.4598697024791756,
+  "stake_yen": 100,
+  "backtest": [
+    {
+      "strategy": "top_p_win_each_race",
+      "bets": 184,
+      "hits": 78,
+      "hit_rate": 0.42391304347826086,
+      "stake_yen": 18400,
+      "win_return_yen": 15130,
+      "loss_amount_yen": 10600,
+      "profit_yen": -3270,
+      "roi": -0.17771739130434783
+    },
+    {
+      "strategy": "positive_expected_value_all",
+      "bets": 328,
+      "hits": 35,
+      "hit_rate": 0.10670731707317073,
+      "stake_yen": 32800,
+      "win_return_yen": 19010,
+      "loss_amount_yen": 29300,
+      "profit_yen": -13790,
+      "roi": -0.42042682926829267
+    }
+  ]
 }

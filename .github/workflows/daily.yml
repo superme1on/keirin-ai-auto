@@ -44,11 +44,9 @@ jobs:
         run: |
           python src/make_sample_data.py --if-missing
 
-      - name: Train if model is missing
+      - name: Train from latest history
         run: |
-          if [ ! -f models/win_model.joblib ]; then
-            python src/train.py
-          fi
+          python src/train.py
 
       - name: Predict
         run: |

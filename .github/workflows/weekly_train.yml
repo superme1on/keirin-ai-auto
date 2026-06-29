@@ -52,13 +52,17 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: keirin-model
-          path: models/
+          path: |
+            models/
+            outputs/backtest_summary.csv
+            outputs/backtest_summary.json
+            outputs/latest_backtest.csv
           retention-days: 30
 
-      - name: Commit model
+      - name: Commit model and backtest
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add models || true
-          git diff --staged --quiet || git commit -m "Update keirin model"
+          git add models outputs/backtest_summary.csv outputs/backtest_summary.json outputs/latest_backtest.csv || true
+          git diff --staged --quiet || git commit -m "Update keirin model and backtest"
           git push
