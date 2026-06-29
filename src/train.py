@@ -126,7 +126,7 @@ def main():
     ensure_history()
     stake_yen = get_stake_yen()
 
-    df = pd.read_csv(HISTORY_CSV)
+    df = pd.read_csv(HISTORY_CSV, dtype={"race_id": str, "player_id": str})
     required = {"race_id", "date", "finish_pos"}
     missing = required - set(df.columns)
     if missing:

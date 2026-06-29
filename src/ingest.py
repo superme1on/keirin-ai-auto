@@ -5,6 +5,7 @@ from pathlib import Path
 import requests
 
 from common import ensure_dirs, HISTORY_CSV, TODAY_CSV
+from fetch_today_entries import fetch_today_entries
 
 
 def download_csv(url: str, path: Path):
@@ -29,7 +30,12 @@ def main():
     if today_url:
         download_csv(today_url, TODAY_CSV)
     else:
-        print("KEIRIN_TODAY_CSV_URL is empty; skip today download")
+        auto_fetch = os.getenv("AUTO_FETCH_TODAY_ENTRIES", "1").strip().lower()
+        if auto_fetch in {"1", "true", "yes", "on"}:
+            print("KEIRIN_TODAY_CSV_URL is empty; fetch today entries from WINTICKET")
+            fetch_today_entries()
+        else:
+            print("KEIRIN_TODAY_CSV_URL is empty; skip today download")
 
     print("ingest done")
 

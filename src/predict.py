@@ -12,12 +12,15 @@ import pandas as pd
 
 from common import (
     ensure_dirs,
+    RAW_DIR,
     TODAY_CSV,
     MODEL_PATH,
     OUTPUT_DIR,
     prepare_features,
     normalize_race_prob,
 )
+
+TRIFECTA_ODDS_CSV = RAW_DIR / "today_trifecta_odds.csv"
 
 
 def get_stake_yen():
@@ -61,6 +64,18 @@ def make_trifecta_candidates(race_df: pd.DataFrame, top_k_riders=7, top_n=8):
     return results
 
 
+def load_trifecta_odds():
+    if not TRIFECTA_ODDS_CSV.exists():
+        return pd.DataFrame(columns=["race_id", "buy", "trifecta_odds"])
+    odds = pd.read_csv(TRIFECTA_ODDS_CSV, dtype={"race_id": str, "buy": str})
+    if "race_id" not in odds.columns or "buy" not in odds.columns:
+        return pd.DataFrame(columns=["race_id", "buy", "trifecta_odds"])
+    odds["race_id"] = odds["race_id"].astype(str)
+    odds["buy"] = odds["buy"].astype(str)
+    odds["trifecta_odds"] = pd.to_numeric(odds.get("trifecta_odds", np.nan), errors="coerce")
+    return odds[["race_id", "buy", "trifecta_odds"]]
+
+
 def main():
     ensure_dirs()
     ensure_ready()
@@ -71,7 +86,7 @@ def main():
     calibrator = bundle.get("calibrator")
     fill_values = bundle["fill_values"]
 
-    df = pd.read_csv(TODAY_CSV)
+    df = pd.read_csv(TODAY_CSV, dtype={"race_id": str, "player_id": str})
     if "race_id" not in df.columns:
         raise ValueError("today_entries.csv must have race_id column")
 
@@ -112,10 +127,20 @@ def main():
     pred[cols].to_csv(latest_path, index=False)
 
     bet_rows = []
+    trifecta_odds = load_trifecta_odds()
     for race_id, g in pred.groupby("race_id", sort=False):
         base = g.iloc[0]
         candidates = make_trifecta_candidates(g)
         for i, cand in enumerate(candidates, start=1):
+            odds_match = trifecta_odds[
+                (trifecta_odds["race_id"] == str(race_id)) & (trifecta_odds["buy"] == cand["buy"])
+            ]
+            trifecta_odds_value = (
+                float(odds_match.iloc[0]["trifecta_odds"])
+                if len(odds_match) and pd.notna(odds_match.iloc[0]["trifecta_odds"])
+                else np.nan
+            )
+            expected_value = cand["trifecta_prob_approx"] * trifecta_odds_value - 1 if pd.notna(trifecta_odds_value) else np.nan
             bet_rows.append({
                 "date": base.get("date", ""),
                 "venue": base.get("venue", ""),
@@ -124,6 +149,12 @@ def main():
                 "candidate_rank": i,
                 "buy": cand["buy"],
                 "trifecta_prob_approx": cand["trifecta_prob_approx"],
+                "trifecta_odds": trifecta_odds_value,
+                "stake_yen": stake_yen,
+                "trifecta_return_yen": round(stake_yen * trifecta_odds_value) if pd.notna(trifecta_odds_value) else np.nan,
+                "trifecta_profit_yen": round(stake_yen * (trifecta_odds_value - 1)) if pd.notna(trifecta_odds_value) else np.nan,
+                "loss_amount_yen": stake_yen,
+                "expected_profit_yen": round(stake_yen * expected_value) if pd.notna(expected_value) else np.nan,
             })
 
     bets = pd.DataFrame(bet_rows)

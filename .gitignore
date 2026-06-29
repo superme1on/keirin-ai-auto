@@ -4,5 +4,6 @@ __pycache__/
 venv/
 logs/
 data/raw/*.csv
+data/raw/*.json
 data/processed/*.csv
 .DS_Store
