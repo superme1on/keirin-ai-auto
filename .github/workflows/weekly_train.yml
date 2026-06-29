@@ -1,0 +1,64 @@
+name: weekly-keirin-train
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 5 * * 1"
+      timezone: "Asia/Tokyo"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: weekly-keirin-train
+  cancel-in-progress: false
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Ingest external data if configured
+        env:
+          KEIRIN_HISTORY_CSV_URL: ${{ secrets.KEIRIN_HISTORY_CSV_URL }}
+          KEIRIN_TODAY_CSV_URL: ${{ secrets.KEIRIN_TODAY_CSV_URL }}
+        run: |
+          python src/ingest.py
+
+      - name: Generate sample data if missing
+        run: |
+          python src/make_sample_data.py --if-missing
+
+      - name: Train
+        run: |
+          python src/train.py
+
+      - name: Upload model artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: keirin-model
+          path: models/
+          retention-days: 30
+
+      - name: Commit model
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add models || true
+          git diff --staged --quiet || git commit -m "Update keirin model"
+          git push

@@ -1,0 +1,26 @@
+{
+  "trained_at_jst": "2026-06-29T23:04:55+09:00",
+  "model": "HistGradientBoostingClassifier + race probability normalization",
+  "n_rows": 8400,
+  "n_train": 5880,
+  "n_calib": 1232,
+  "n_test": 1288,
+  "n_races": 1200,
+  "features": [
+    "car_no",
+    "age",
+    "score",
+    "win_rate",
+    "place2_rate",
+    "place3_rate",
+    "back_count",
+    "recent_avg_finish",
+    "days_since_last_race",
+    "venue_win_rate",
+    "odds_win",
+    "style_code"
+  ],
+  "brier_score_binary": 0.10148585986878819,
+  "auc_binary": 0.8207580143352238,
+  "race_logloss": 1.4598697024791756
+}
