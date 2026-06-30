@@ -53,6 +53,11 @@ jobs:
         run: |
           python src/update_growth_log.py --kind train
 
+      - name: Run walk-forward validation
+        run: |
+          python src/walk_forward.py --min-train-dates 10 --retrain-every-days 1
+          python src/update_growth_log.py --kind walk_forward
+
       - name: Upload model artifact
         uses: actions/upload-artifact@v7
         with:
@@ -63,12 +68,15 @@ jobs:
             outputs/backtest_summary.json
             outputs/latest_backtest.csv
             outputs/growth_log.csv
+            outputs/walk_forward_summary.csv
+            outputs/walk_forward_predictions.csv
+            outputs/walk_forward_overall.json
           retention-days: 30
 
       - name: Commit model and backtest
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add models outputs/backtest_summary.csv outputs/backtest_summary.json outputs/latest_backtest.csv outputs/growth_log.csv || true
+          git add models outputs/backtest_summary.csv outputs/backtest_summary.json outputs/latest_backtest.csv outputs/growth_log.csv outputs/walk_forward_summary.csv outputs/walk_forward_predictions.csv outputs/walk_forward_overall.json || true
           git diff --staged --quiet || git commit -m "Update keirin model and backtest"
           git push

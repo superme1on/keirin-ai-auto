@@ -1,4 +1,5 @@
 from pathlib import Path
+import hashlib
 import numpy as np
 import pandas as pd
 
@@ -15,6 +16,7 @@ MODEL_PATH = MODEL_DIR / "win_model.joblib"
 METRICS_PATH = MODEL_DIR / "metrics.json"
 
 FEATURE_COLS = [
+    "race_no",
     "car_no",
     "age",
     "score",
@@ -26,7 +28,12 @@ FEATURE_COLS = [
     "days_since_last_race",
     "venue_win_rate",
     "odds_win",
+    "distance",
     "style_code",
+    "venue_code",
+    "race_class_code",
+    "race_type_code",
+    "player_id_code",
 ]
 
 STYLE_MAP = {
@@ -53,8 +60,28 @@ def add_style_code(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def prepare_features(df: pd.DataFrame, fill_values=None):
+def stable_bucket(value, modulo=1000):
+    if pd.isna(value):
+        return -1.0
+    text = str(value).strip()
+    if not text:
+        return -1.0
+    digest = hashlib.md5(text.encode("utf-8")).hexdigest()
+    return float(int(digest[:8], 16) % modulo)
+
+
+def add_categorical_codes(df: pd.DataFrame) -> pd.DataFrame:
     df = add_style_code(df)
+    df = df.copy()
+    df["venue_code"] = df.get("venue", pd.Series(index=df.index, dtype=object)).map(lambda x: stable_bucket(x, 200))
+    df["race_class_code"] = df.get("race_class", pd.Series(index=df.index, dtype=object)).map(lambda x: stable_bucket(x, 50))
+    df["race_type_code"] = df.get("race_type", pd.Series(index=df.index, dtype=object)).map(lambda x: stable_bucket(x, 100))
+    df["player_id_code"] = df.get("player_id", pd.Series(index=df.index, dtype=object)).map(lambda x: stable_bucket(x, 2000))
+    return df
+
+
+def prepare_features(df: pd.DataFrame, fill_values=None):
+    df = add_categorical_codes(df)
 
     for col in FEATURE_COLS:
         if col not in df.columns:

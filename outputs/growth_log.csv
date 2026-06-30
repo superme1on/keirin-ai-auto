@@ -1,3 +1,5 @@
 logged_at_jst,kind,target_date,history_rows,history_races,auc_binary,brier_score_binary,race_logloss,top1_bets,top1_hits,top1_hit_rate,settlement_bets,settlement_hits,stake_yen,return_yen,profit_yen,roi,note
 2026-06-30T22:15:02+09:00,train,2026-06-30,2115.0,299.0,0.7222842261904762,0.1231858995220632,1.7200788918933267,36.0,12.0,0.3333333333333333,,,,,,,WINTICKET history training metrics
 2026-06-30T22:15:02+09:00,settle,2026-06-29,,,,,,,,,431.0,1.0,43100.0,3120.0,-39980.0,-0.9276102088167052,AI purchase settlement
+2026-06-30T22:18:23+09:00,train,2026-06-30,2115.0,299.0,0.6956225198412699,0.1171203088712775,1.7162306567248258,36.0,15.0,0.4166666666666667,,,,,,,WINTICKET history training metrics
+2026-06-30T22:19:00+09:00,walk_forward,2026-06-30,,206.0,0.680860326883738,,2.003680900396498,206.0,60.0,0.2912621359223301,,,,,,,hide-result then predict then reveal walk-forward test

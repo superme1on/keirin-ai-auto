@@ -85,6 +85,8 @@ BET_STAKE_YEN=500 python src/predict.py
 
 `outputs/growth_log.csv` は、学習時のAUC、本命的中率、結果精算後の損益を追記していく成長記録です。
 
+`outputs/walk_forward_summary.csv` は、結果を見ずに日付順で予想し、結果が出たら次の日の学習に追加する実戦形式の検証です。
+
 ## 注意
 
 これは予想補助ツールです。的中や利益を保証するものではありません。

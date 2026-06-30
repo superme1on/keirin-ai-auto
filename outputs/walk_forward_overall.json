@@ -1,0 +1,30 @@
+{
+  "created_at_jst": "2026-06-30T22:18:07+09:00",
+  "features": [
+    "race_no",
+    "car_no",
+    "age",
+    "score",
+    "win_rate",
+    "place2_rate",
+    "place3_rate",
+    "back_count",
+    "recent_avg_finish",
+    "days_since_last_race",
+    "venue_win_rate",
+    "odds_win",
+    "distance",
+    "style_code",
+    "venue_code",
+    "race_class_code",
+    "race_type_code",
+    "player_id_code"
+  ],
+  "days": 22,
+  "test_races": 206,
+  "top1_bets": 206,
+  "top1_hits": 60,
+  "top1_hit_rate": 0.2912621359223301,
+  "avg_auc_binary": 0.680860326883738,
+  "avg_race_logloss": 2.003680900396498
+}

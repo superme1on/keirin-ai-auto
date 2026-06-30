@@ -57,6 +57,11 @@ jobs:
         run: |
           python src/update_growth_log.py --kind train
 
+      - name: Run walk-forward validation
+        run: |
+          python src/walk_forward.py --min-train-dates 10 --retrain-every-days 1
+          python src/update_growth_log.py --kind walk_forward
+
       - name: Upload output artifact
         uses: actions/upload-artifact@v7
         with:

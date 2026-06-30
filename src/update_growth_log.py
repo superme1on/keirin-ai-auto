@@ -99,12 +99,41 @@ def read_settlement_row():
     }
 
 
+def read_walk_forward_row():
+    path = OUTPUT_DIR / "walk_forward_overall.json"
+    if not path.exists():
+        raise FileNotFoundError(path)
+    overall = json.loads(path.read_text(encoding="utf-8"))
+    return {
+        "logged_at_jst": datetime.now(ZoneInfo("Asia/Tokyo")).isoformat(timespec="seconds"),
+        "kind": "walk_forward",
+        "target_date": latest_prediction_date(),
+        "history_rows": np.nan,
+        "history_races": overall.get("test_races", np.nan),
+        "auc_binary": overall.get("avg_auc_binary", np.nan),
+        "brier_score_binary": np.nan,
+        "race_logloss": overall.get("avg_race_logloss", np.nan),
+        "top1_bets": overall.get("top1_bets", np.nan),
+        "top1_hits": overall.get("top1_hits", np.nan),
+        "top1_hit_rate": overall.get("top1_hit_rate", np.nan),
+        "settlement_bets": np.nan,
+        "settlement_hits": np.nan,
+        "stake_yen": np.nan,
+        "return_yen": np.nan,
+        "profit_yen": np.nan,
+        "roi": np.nan,
+        "note": "hide-result then predict then reveal walk-forward test",
+    }
+
+
 def append_growth_row(kind):
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     if kind == "train":
         row = read_training_row()
     elif kind == "settle":
         row = read_settlement_row()
+    elif kind == "walk_forward":
+        row = read_walk_forward_row()
     else:
         raise ValueError(f"unknown kind: {kind}")
 
@@ -121,7 +150,7 @@ def append_growth_row(kind):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--kind", choices=["train", "settle"], required=True)
+    parser.add_argument("--kind", choices=["train", "settle", "walk_forward"], required=True)
     args = parser.parse_args()
     append_growth_row(args.kind)
 
