@@ -42,8 +42,12 @@ jobs:
 
       - name: Build real history if no external history is configured
         if: ${{ secrets.KEIRIN_HISTORY_CSV_URL == '' }}
+        env:
+          HISTORY_MONTHS_BACK: 24
+          HISTORY_MAX_RACES: 5000
+          HISTORY_WORKERS: 8
         run: |
-          python src/build_history.py --months-back 1 --max-races 600
+          python src/build_history.py --months-back "$HISTORY_MONTHS_BACK" --max-races "$HISTORY_MAX_RACES" --workers "$HISTORY_WORKERS" --sleep-sec 0
 
       - name: Train
         run: |
@@ -53,10 +57,10 @@ jobs:
         run: |
           python src/update_growth_log.py --kind train
 
-      - name: Run walk-forward validation
+      - name: Run profit backtest
         run: |
-          python src/walk_forward.py --min-train-dates 10 --retrain-every-days 1
-          python src/update_growth_log.py --kind walk_forward
+          python src/profit_backtest.py --min-train-dates 30 --min-prob 0.10 --min-expected-profit 1200 --max-odds 200 --max-bets-per-race 2 --max-bets-per-day 40 --base-stake 100 --max-stake 500
+          python src/update_growth_log.py --kind profit_backtest
 
       - name: Upload model artifact
         uses: actions/upload-artifact@v7
@@ -68,15 +72,16 @@ jobs:
             outputs/backtest_summary.json
             outputs/latest_backtest.csv
             outputs/growth_log.csv
-            outputs/walk_forward_summary.csv
-            outputs/walk_forward_predictions.csv
-            outputs/walk_forward_overall.json
+            outputs/profit_backtest_bets.csv
+            outputs/profit_backtest_summary.csv
+            outputs/profit_backtest_summary.json
+            outputs/profit_backtest_report.md
           retention-days: 30
 
       - name: Commit model and backtest
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add models outputs/backtest_summary.csv outputs/backtest_summary.json outputs/latest_backtest.csv outputs/growth_log.csv outputs/walk_forward_summary.csv outputs/walk_forward_predictions.csv outputs/walk_forward_overall.json || true
+          git add models outputs/backtest_summary.csv outputs/backtest_summary.json outputs/latest_backtest.csv outputs/growth_log.csv outputs/profit_backtest_bets.csv outputs/profit_backtest_summary.csv outputs/profit_backtest_summary.json outputs/profit_backtest_report.md || true
           git diff --staged --quiet || git commit -m "Update keirin model and backtest"
           git push

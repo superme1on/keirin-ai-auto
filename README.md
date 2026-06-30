@@ -11,10 +11,12 @@ GitHub Actionsで自動起動する競輪予想AIスターターです。
 - WINTICKETの過去結果から学習用 `history.csv` を自動構築
 - データが取れない場合はサンプルデータで動作確認
 - outputs/latest_predictions.csv に予想結果を保存
-- outputs/latest_bets.csv に3連単候補と実オッズが取れた場合の払戻を保存
+- outputs/latest_bets.csv に実際に買う3連単候補と購入額を保存
+- outputs/latest_bet_candidates.csv に検討した全3連単候補を保存
 - outputs/japanese_report.md に日本語の購入理由と損益結果を保存
 - outputs/growth_log.csv に学習精度と損益の成長記録を追記
 - outputs/latest_backtest.csv に過去データでの損益検証を保存
+- outputs/profit_backtest_report.md に過去実オッズ込みの損益バックテストを保存
 - outputs/index.html に簡易表示を保存
 
 ## 本物データを使う場合
@@ -46,16 +48,23 @@ race_id,date,venue,race_no,player_id,car_no,age,score,win_rate,place2_rate,place
 pip install -r requirements.txt
 python src/make_sample_data.py --if-missing
 python src/ingest.py
-python src/build_history.py --months-back 1 --max-races 300
+python src/build_history.py --months-back 24 --max-races 5000 --workers 8 --sleep-sec 0
 python src/train.py
+python src/profit_backtest.py --min-train-dates 30 --min-prob 0.10 --min-expected-profit 1200 --max-odds 200 --max-bets-per-race 2 --max-bets-per-day 40 --base-stake 100 --max-stake 500
+python src/fetch_today_entries.py
 python src/predict.py
 ```
 
-賭け金は1点100円で計算します。変更したい場合は `BET_STAKE_YEN` を指定してください。
+3連単の買い目は、損益バックテストで絞った条件をデフォルトにしています。
+
+- `BET_MIN_TRIFECTA_PROB`: 3連単近似確率の下限。標準は `0.10`
+- `BET_MIN_EXPECTED_PROFIT_100YEN`: 100円購入あたりの期待利益下限。標準は `1200`
+- `BET_MAX_TRIFECTA_ODDS`: オッズ上限。標準は `200`
+- `BET_BASE_STAKE_YEN`: 最低購入額。標準は `100`
+- `BET_MAX_STAKE_YEN`: 期待値が高いときの購入上限。標準は `500`
 
 ```bash
-BET_STAKE_YEN=500 python src/train.py
-BET_STAKE_YEN=500 python src/predict.py
+BET_BASE_STAKE_YEN=100 BET_MAX_STAKE_YEN=500 python src/predict.py
 ```
 
 ## 出力
@@ -70,12 +79,15 @@ BET_STAKE_YEN=500 python src/predict.py
 
 `outputs/backtest_summary.csv` は過去データのテスト期間で、実際に当たり外れを判定した損益サマリーです。
 
-`outputs/latest_bets.csv` には3連単候補を出します。WINTICKETから3連単オッズが取れた場合は、以下も入ります。
+`outputs/latest_bets.csv` には、AIが実際に買う3連単候補だけを出します。WINTICKETから3連単オッズが取れた場合は、以下も入ります。
 
 - `trifecta_odds`: 3連単オッズ
 - `trifecta_return_yen`: 当たった場合の払戻金
 - `trifecta_profit_yen`: 当たった場合の利益
+- `expected_profit_100yen`: 100円買った場合の期待利益
 - `expected_profit_yen`: AI確率と3連単オッズから見た期待利益
+
+`outputs/latest_bet_candidates.csv` は、AIが検討した全3連単候補です。
 
 `outputs/purchase_plan.csv` は、`expected_profit_yen > 0` の買い目だけを抜き出した購入予定です。
 
@@ -86,6 +98,8 @@ BET_STAKE_YEN=500 python src/predict.py
 `outputs/growth_log.csv` は、学習時のAUC、本命的中率、結果精算後の損益を追記していく成長記録です。
 
 `outputs/walk_forward_summary.csv` は、結果を見ずに日付順で予想し、結果が出たら次の日の学習に追加する実戦形式の検証です。
+
+`outputs/profit_backtest_report.md` は、過去の実オッズを使った損益バックテストです。
 
 ## 注意
 

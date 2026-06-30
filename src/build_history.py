@@ -2,6 +2,7 @@ import argparse
 import json
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from urllib.parse import urljoin
 from zoneinfo import ZoneInfo
@@ -9,7 +10,7 @@ from zoneinfo import ZoneInfo
 import numpy as np
 import pandas as pd
 
-from common import HISTORY_CSV, RAW_DIR, ensure_dirs
+from common import HISTORY_CSV, HISTORY_TRIFECTA_ODDS_CSV, RAW_DIR, ensure_dirs
 from fetch_today_entries import (
     BASE_URL,
     days_since_last_race,
@@ -98,10 +99,40 @@ def collect_race_urls_for_cup(cup):
     return sorted(set(race_urls))
 
 
-def parse_history_race(url):
+RACE_CACHE_DIR = RAW_DIR / "race_cache"
+TRIFECTA_ODDS_COLUMNS = [
+    "date",
+    "venue",
+    "race_no",
+    "race_id",
+    "buy",
+    "trifecta_odds",
+    "popularity_order",
+    "is_actual",
+    "actual_trifecta",
+    "source_url",
+]
+
+
+def race_cache_path(url):
+    race_id = url.rstrip("/").split("/")[-3:]
+    safe = "_".join(race_id)
+    return RACE_CACHE_DIR / f"{safe}.json"
+
+
+def parse_history_race(url, use_cache=True):
+    cache_path = race_cache_path(url)
+    if use_cache and cache_path.exists():
+        data = json.loads(cache_path.read_text(encoding="utf-8"))
+        rows = data.get("rows", [])
+        odds_rows = data.get("odds_rows", [])
+        if rows and odds_rows:
+            return rows, odds_rows
+
     html = http_get(url)
     state = extract_preloaded_state(html)
     race_data = find_query_data(state, "FETCH_KEIRIN_RACE")
+    odds_data = find_query_data(state, "FETCH_KEIRIN_RACE_ODDS")
     if not race_data:
         raise ValueError(f"race data not found: {url}")
 
@@ -160,10 +191,113 @@ def parse_history_race(url):
             "distance": race.get("distance", np.nan),
         }
         rows.append(history_row)
-    return rows
+
+    odds_rows = []
+    actual_top3 = []
+    entry_by_player = {str(e.get("playerId")): int(e.get("number")) for e in race_data.get("entries", []) if e.get("number")}
+    for result in sorted(race_data.get("results", []) or [], key=lambda x: x.get("order", 999)):
+        if result.get("order") in [1, 2, 3]:
+            car = entry_by_player.get(str(result.get("playerId")))
+            if car:
+                actual_top3.append(car)
+    actual_trifecta = "-".join(str(x) for x in actual_top3[:3]) if len(actual_top3) >= 3 else ""
+
+    trifecta_items = odds_data.get("trifecta", []) or race_data.get("trifecta", []) or []
+    for item in trifecta_items:
+        key = item.get("key", [])
+        if len(key) != 3 or item.get("absent"):
+            continue
+        buy = f"{int(key[0])}-{int(key[1])}-{int(key[2])}"
+        odds_rows.append(
+            {
+                "date": race_date,
+                "venue": venue,
+                "race_no": race_no,
+                "race_id": race_id,
+                "buy": buy,
+                "trifecta_odds": item.get("odds", np.nan),
+                "popularity_order": item.get("popularityOrder", np.nan),
+                "is_actual": buy == actual_trifecta,
+                "actual_trifecta": actual_trifecta,
+                "source_url": url,
+            }
+        )
+
+    if use_cache:
+        RACE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        cache_path.write_text(json.dumps({"rows": rows, "odds_rows": odds_rows}, ensure_ascii=False), encoding="utf-8")
+
+    return rows, odds_rows
 
 
-def build_history(months_back=1, max_cups=None, max_races=None, sleep_sec=0.2):
+def collect_all_race_urls(cups, workers=1):
+    failures = []
+    all_race_urls = []
+    workers = max(int(workers or 1), 1)
+    if workers == 1:
+        for cup_i, cup in enumerate(cups, start=1):
+            try:
+                race_urls = collect_race_urls_for_cup(cup)
+                all_race_urls.extend(race_urls)
+                print(f"cup {cup_i}/{len(cups)}: {cup.get('cup_url')} races={len(race_urls)}", flush=True)
+            except Exception as e:
+                failures.append({"cup": cup.get("id"), "url": cup.get("cup_url"), "error": str(e)})
+                print(f"failed cup {cup_i}/{len(cups)} {cup.get('cup_url')} error={e}", flush=True)
+        return sorted(set(all_race_urls)), failures
+
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        future_map = {executor.submit(collect_race_urls_for_cup, cup): (cup_i, cup) for cup_i, cup in enumerate(cups, start=1)}
+        done = 0
+        for future in as_completed(future_map):
+            cup_i, cup = future_map[future]
+            done += 1
+            try:
+                race_urls = future.result()
+                all_race_urls.extend(race_urls)
+                print(
+                    f"cup {done}/{len(cups)}: {cup.get('cup_url')} races={len(race_urls)} total={len(set(all_race_urls))}",
+                    flush=True,
+                )
+            except Exception as e:
+                failures.append({"cup": cup.get("id"), "url": cup.get("cup_url"), "error": str(e)})
+                print(f"failed cup {cup_i}/{len(cups)} {cup.get('cup_url')} error={e}", flush=True)
+    return sorted(set(all_race_urls)), failures
+
+
+def fetch_history_races(race_urls, sleep_sec=0.2, use_cache=True, workers=1):
+    failures = []
+    all_rows = []
+    all_odds_rows = []
+    workers = max(int(workers or 1), 1)
+    if workers == 1:
+        for race_count, race_url in enumerate(race_urls, start=1):
+            try:
+                rows, odds_rows = parse_history_race(race_url, use_cache=use_cache)
+                all_rows.extend(rows)
+                all_odds_rows.extend(odds_rows)
+                print(f"history race {race_count}/{len(race_urls)}: {race_url} rows={len(rows)} odds={len(odds_rows)}", flush=True)
+            except Exception as e:
+                failures.append({"race_url": race_url, "error": str(e)})
+                print(f"failed race {race_count}/{len(race_urls)}: {race_url} error={e}", flush=True)
+            time.sleep(sleep_sec)
+        return all_rows, all_odds_rows, failures
+
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        future_map = {executor.submit(parse_history_race, race_url, use_cache): race_url for race_url in race_urls}
+        for race_count, future in enumerate(as_completed(future_map), start=1):
+            race_url = future_map[future]
+            try:
+                rows, odds_rows = future.result()
+                all_rows.extend(rows)
+                all_odds_rows.extend(odds_rows)
+                print(f"history race {race_count}/{len(race_urls)}: {race_url} rows={len(rows)} odds={len(odds_rows)}", flush=True)
+            except Exception as e:
+                failures.append({"race_url": race_url, "error": str(e)})
+                print(f"failed race {race_count}/{len(race_urls)}: {race_url} error={e}", flush=True)
+    return all_rows, all_odds_rows, failures
+
+
+def build_history(months_back=1, max_cups=None, max_races=None, sleep_sec=0.2, use_cache=True, workers=1):
     ensure_dirs()
     cups = collect_cups(months_back=months_back)
     if max_cups:
@@ -171,34 +305,15 @@ def build_history(months_back=1, max_cups=None, max_races=None, sleep_sec=0.2):
     if not cups:
         raise ValueError("no past cups found")
 
-    failures = []
-    all_race_urls = []
-    for cup_i, cup in enumerate(cups, start=1):
-        try:
-            race_urls = collect_race_urls_for_cup(cup)
-            all_race_urls.extend(race_urls)
-            print(f"cup {cup_i}/{len(cups)}: {cup.get('cup_url')} races={len(race_urls)}")
-        except Exception as e:
-            failures.append({"cup": cup.get("id"), "url": cup.get("cup_url"), "error": str(e)})
-            print(f"failed cup {cup_i}/{len(cups)} {cup.get('cup_url')} error={e}")
-
-    all_race_urls = sorted(set(all_race_urls))
+    all_race_urls, failures = collect_all_race_urls(cups, workers=workers)
     if max_races and len(all_race_urls) > max_races:
         indexes = np.linspace(0, len(all_race_urls) - 1, max_races, dtype=int)
         race_urls_to_fetch = [all_race_urls[i] for i in indexes]
     else:
         race_urls_to_fetch = all_race_urls
 
-    all_rows = []
-    for race_count, race_url in enumerate(race_urls_to_fetch, start=1):
-        try:
-            rows = parse_history_race(race_url)
-            all_rows.extend(rows)
-            print(f"history race {race_count}/{len(race_urls_to_fetch)}: {race_url} rows={len(rows)}")
-        except Exception as e:
-            failures.append({"race_url": race_url, "error": str(e)})
-            print(f"failed race {race_count}/{len(race_urls_to_fetch)}: {race_url} error={e}")
-        time.sleep(sleep_sec)
+    all_rows, all_odds_rows, race_failures = fetch_history_races(race_urls_to_fetch, sleep_sec, use_cache, workers=workers)
+    failures.extend(race_failures)
 
     if not all_rows:
         raise ValueError(f"no history rows built: {failures[:3]}")
@@ -206,6 +321,11 @@ def build_history(months_back=1, max_cups=None, max_races=None, sleep_sec=0.2):
     df = pd.DataFrame(all_rows)
     df = df.drop_duplicates(["race_id", "player_id"]).sort_values(["date", "venue", "race_no", "car_no"])
     df.to_csv(HISTORY_CSV, index=False)
+
+    odds_df = pd.DataFrame(all_odds_rows, columns=TRIFECTA_ODDS_COLUMNS)
+    if len(odds_df):
+        odds_df = odds_df.drop_duplicates(["race_id", "buy"]).sort_values(["date", "venue", "race_no", "popularity_order", "buy"])
+    odds_df.to_csv(HISTORY_TRIFECTA_ODDS_CSV, index=False)
 
     metadata = {
         "source": "WINTICKET historical racecards",
@@ -216,6 +336,8 @@ def build_history(months_back=1, max_cups=None, max_races=None, sleep_sec=0.2):
         "fetched_races": len(race_urls_to_fetch),
         "races": int(df["race_id"].nunique()),
         "rows": int(len(df)),
+        "trifecta_odds_rows": int(len(odds_df)),
+        "workers": int(workers or 1),
         "failures": failures,
     }
     (RAW_DIR / "history_metadata.json").write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -228,8 +350,11 @@ def main():
     parser.add_argument("--months-back", type=int, default=1)
     parser.add_argument("--max-cups", type=int, default=None)
     parser.add_argument("--max-races", type=int, default=None)
+    parser.add_argument("--sleep-sec", type=float, default=0.2)
+    parser.add_argument("--no-cache", action="store_true")
+    parser.add_argument("--workers", type=int, default=1)
     args = parser.parse_args()
-    build_history(args.months_back, args.max_cups, args.max_races)
+    build_history(args.months_back, args.max_cups, args.max_races, args.sleep_sec, not args.no_cache, args.workers)
 
 
 if __name__ == "__main__":

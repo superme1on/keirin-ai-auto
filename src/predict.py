@@ -32,6 +32,31 @@ def get_stake_yen():
     return max(stake, 0)
 
 
+def get_float_env(name, default):
+    raw = os.getenv(name, str(default)).strip()
+    try:
+        return float(raw)
+    except ValueError:
+        return float(default)
+
+
+def get_int_env(name, default):
+    raw = os.getenv(name, str(default)).strip()
+    try:
+        return int(raw)
+    except ValueError:
+        return int(default)
+
+
+def stake_from_edge(expected_profit_100yen, base_stake=100, max_stake=500):
+    if pd.isna(expected_profit_100yen):
+        return base_stake
+    if expected_profit_100yen < 100:
+        return base_stake
+    extra_units = int(min((expected_profit_100yen // 300), (max_stake - base_stake) // 100))
+    return int(base_stake + extra_units * 100)
+
+
 def ensure_ready():
     if not TODAY_CSV.exists():
         print("today_entries.csv not found; generating sample data")
@@ -42,7 +67,7 @@ def ensure_ready():
         subprocess.check_call([sys.executable, "src/train.py"])
 
 
-def make_trifecta_candidates(race_df: pd.DataFrame, top_k_riders=7, top_n=8):
+def make_trifecta_candidates(race_df: pd.DataFrame, top_k_riders=5):
     riders = race_df.sort_values("p_win", ascending=False).head(top_k_riders)
     rows = riders[["car_no", "p_win"]].to_dict("records")
     results = []
@@ -60,7 +85,7 @@ def make_trifecta_candidates(race_df: pd.DataFrame, top_k_riders=7, top_n=8):
             "trifecta_prob_approx": prob,
         })
 
-    results = sorted(results, key=lambda x: x["trifecta_prob_approx"], reverse=True)[:top_n]
+    results = sorted(results, key=lambda x: x["trifecta_prob_approx"], reverse=True)
     return results
 
 
@@ -79,7 +104,12 @@ def load_trifecta_odds():
 def main():
     ensure_dirs()
     ensure_ready()
-    stake_yen = get_stake_yen()
+    base_stake_yen = get_int_env("BET_BASE_STAKE_YEN", get_stake_yen())
+    max_stake_yen = get_int_env("BET_MAX_STAKE_YEN", 500)
+    min_trifecta_prob = get_float_env("BET_MIN_TRIFECTA_PROB", 0.10)
+    min_expected_profit_100yen = get_float_env("BET_MIN_EXPECTED_PROFIT_100YEN", 1200)
+    max_trifecta_odds = get_float_env("BET_MAX_TRIFECTA_ODDS", 200)
+    max_bets_per_race = get_int_env("BET_MAX_BETS_PER_RACE", 2)
 
     bundle = joblib.load(MODEL_PATH)
     model = bundle["model"]
@@ -99,11 +129,11 @@ def main():
     pred["p_raw"] = np.clip(calibrated, 1e-6, 1.0)
     pred = normalize_race_prob(pred, "p_raw", "p_win")
     pred["expected_value_win"] = pred["p_win"] * pd.to_numeric(pred.get("odds_win", np.nan), errors="coerce") - 1
-    pred["stake_yen"] = stake_yen
-    pred["win_return_yen"] = (stake_yen * pd.to_numeric(pred.get("odds_win", np.nan), errors="coerce")).round(0)
-    pred["win_profit_yen"] = pred["win_return_yen"] - stake_yen
-    pred["loss_amount_yen"] = stake_yen
-    pred["expected_profit_yen"] = (stake_yen * pred["expected_value_win"]).round(0)
+    pred["stake_yen"] = base_stake_yen
+    pred["win_return_yen"] = (base_stake_yen * pd.to_numeric(pred.get("odds_win", np.nan), errors="coerce")).round(0)
+    pred["win_profit_yen"] = pred["win_return_yen"] - base_stake_yen
+    pred["loss_amount_yen"] = base_stake_yen
+    pred["expected_profit_yen"] = (base_stake_yen * pred["expected_value_win"]).round(0)
     pred["rank_in_race"] = pred.groupby("race_id")["p_win"].rank(ascending=False, method="first").astype(int)
 
     sort_cols = ["date", "venue", "race_no", "rank_in_race"]
@@ -150,16 +180,36 @@ def main():
                 "buy": cand["buy"],
                 "trifecta_prob_approx": cand["trifecta_prob_approx"],
                 "trifecta_odds": trifecta_odds_value,
-                "stake_yen": stake_yen,
-                "trifecta_return_yen": round(stake_yen * trifecta_odds_value) if pd.notna(trifecta_odds_value) else np.nan,
-                "trifecta_profit_yen": round(stake_yen * (trifecta_odds_value - 1)) if pd.notna(trifecta_odds_value) else np.nan,
-                "loss_amount_yen": stake_yen,
-                "expected_profit_yen": round(stake_yen * expected_value) if pd.notna(expected_value) else np.nan,
+                "expected_profit_100yen": round(100 * expected_value) if pd.notna(expected_value) else np.nan,
             })
 
-    bets = pd.DataFrame(bet_rows)
+    candidates = pd.DataFrame(bet_rows)
+    if len(candidates):
+        candidates["is_selected"] = (
+            (pd.to_numeric(candidates["trifecta_prob_approx"], errors="coerce") >= min_trifecta_prob)
+            & (pd.to_numeric(candidates["expected_profit_100yen"], errors="coerce") >= min_expected_profit_100yen)
+            & (pd.to_numeric(candidates["trifecta_odds"], errors="coerce") <= max_trifecta_odds)
+        )
+        selected_parts = []
+        for _, g in candidates[candidates["is_selected"]].groupby("race_id", sort=False):
+            selected_parts.append(g.sort_values("expected_profit_100yen", ascending=False).head(max_bets_per_race))
+        bets = pd.concat(selected_parts, ignore_index=True) if selected_parts else candidates.head(0).copy()
+        if len(bets):
+            bets["stake_yen"] = bets["expected_profit_100yen"].map(
+                lambda x: stake_from_edge(x, base_stake_yen, max_stake_yen)
+            )
+            bets["trifecta_return_yen"] = (bets["stake_yen"] * pd.to_numeric(bets["trifecta_odds"], errors="coerce")).round(0)
+            bets["trifecta_profit_yen"] = bets["trifecta_return_yen"] - bets["stake_yen"]
+            bets["loss_amount_yen"] = bets["stake_yen"]
+            bets["expected_profit_yen"] = (bets["stake_yen"] * pd.to_numeric(bets["expected_profit_100yen"], errors="coerce") / 100).round(0)
+    else:
+        candidates = pd.DataFrame(columns=["date", "venue", "race_no", "race_id", "candidate_rank", "buy"])
+        bets = candidates.copy()
+
     bets_path = OUTPUT_DIR / f"bets_{today_jst}.csv"
     latest_bets_path = OUTPUT_DIR / "latest_bets.csv"
+    latest_candidates_path = OUTPUT_DIR / "latest_bet_candidates.csv"
+    candidates.to_csv(latest_candidates_path, index=False)
     bets.to_csv(bets_path, index=False)
     bets.to_csv(latest_bets_path, index=False)
 
@@ -196,10 +246,19 @@ def main():
     summary = {
         "created": str(latest_path),
         "bets": str(latest_bets_path),
+        "candidates": str(latest_candidates_path),
         "html": str(html_path),
         "n_rows": int(len(pred)),
         "n_races": int(pred["race_id"].nunique()),
-        "stake_yen": stake_yen,
+        "base_stake_yen": base_stake_yen,
+        "max_stake_yen": max_stake_yen,
+        "selected_bets": int(len(bets)),
+        "bet_filter": {
+            "min_trifecta_prob": min_trifecta_prob,
+            "min_expected_profit_100yen": min_expected_profit_100yen,
+            "max_trifecta_odds": max_trifecta_odds,
+            "max_bets_per_race": max_bets_per_race,
+        },
     }
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     print(pred[cols].head(30).to_string(index=False))

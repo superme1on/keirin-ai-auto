@@ -40,27 +40,23 @@ jobs:
         run: |
           python src/ingest.py
 
-      - name: Build real history if no external history is configured
+      - name: Fetch today entries if no external today data is configured
+        if: ${{ secrets.KEIRIN_TODAY_CSV_URL == '' }}
+        run: |
+          python src/fetch_today_entries.py
+
+      - name: Build fallback model only if missing
         if: ${{ secrets.KEIRIN_HISTORY_CSV_URL == '' }}
         run: |
-          python src/build_history.py --months-back 1 --max-races 300
-
-      - name: Train from latest history
-        run: |
-          python src/train.py
+          if [ ! -f models/win_model.joblib ]; then
+            python src/build_history.py --months-back 1 --max-races 300 --workers 4
+            python src/train.py
+            python src/update_growth_log.py --kind train
+          fi
 
       - name: Predict
         run: |
           python src/predict.py
-
-      - name: Append training growth log
-        run: |
-          python src/update_growth_log.py --kind train
-
-      - name: Run walk-forward validation
-        run: |
-          python src/walk_forward.py --min-train-dates 10 --retrain-every-days 1
-          python src/update_growth_log.py --kind walk_forward
 
       - name: Upload output artifact
         uses: actions/upload-artifact@v7

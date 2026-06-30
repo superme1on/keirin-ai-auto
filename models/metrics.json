@@ -1,11 +1,11 @@
 {
-  "trained_at_jst": "2026-06-30T22:18:19+09:00",
+  "trained_at_jst": "2026-06-30T22:50:54+09:00",
   "model": "HistGradientBoostingClassifier + race probability normalization",
-  "n_rows": 2115,
-  "n_train": 1514,
-  "n_calib": 341,
-  "n_test": 260,
-  "n_races": 299,
+  "n_rows": 34930,
+  "n_train": 24527,
+  "n_calib": 5137,
+  "n_test": 5266,
+  "n_races": 4981,
   "features": [
     "race_no",
     "car_no",
@@ -26,21 +26,21 @@
     "race_type_code",
     "player_id_code"
   ],
-  "brier_score_binary": 0.11712030887127756,
-  "auc_binary": 0.6956225198412699,
-  "race_logloss": 1.7162306567248258,
+  "brier_score_binary": 0.10488275042433064,
+  "auc_binary": 0.7698988281405523,
+  "race_logloss": 1.5923408911161225,
   "stake_yen": 100,
   "backtest": [
     {
       "strategy": "top_p_win_each_race",
-      "bets": 36,
-      "hits": 15,
-      "hit_rate": 0.4166666666666667,
-      "stake_yen": 3600,
+      "bets": 750,
+      "hits": 327,
+      "hit_rate": 0.436,
+      "stake_yen": 75000,
       "win_return_yen": 0,
-      "loss_amount_yen": 2100,
-      "profit_yen": -2100,
-      "roi": -0.5833333333333334
+      "loss_amount_yen": 42300,
+      "profit_yen": -42300,
+      "roi": -0.564
     },
     {
       "strategy": "positive_expected_value_all",
