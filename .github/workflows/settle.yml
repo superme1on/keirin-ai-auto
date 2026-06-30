@@ -41,6 +41,10 @@ jobs:
         run: |
           python src/settle_results.py
 
+      - name: Append settlement growth log
+        run: |
+          python src/update_growth_log.py --kind settle
+
       - name: Upload settlement artifact
         uses: actions/upload-artifact@v7
         with:
@@ -50,12 +54,13 @@ jobs:
             outputs/settled_bets.csv
             outputs/settlement_summary.csv
             outputs/japanese_report.md
+            outputs/growth_log.csv
           retention-days: 30
 
       - name: Commit settlement
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add outputs/purchase_plan.csv outputs/settled_bets.csv outputs/settlement_summary.csv outputs/japanese_report.md || true
+          git add outputs/purchase_plan.csv outputs/settled_bets.csv outputs/settlement_summary.csv outputs/japanese_report.md outputs/growth_log.csv || true
           git diff --staged --quiet || git commit -m "Settle keirin predictions"
           git push

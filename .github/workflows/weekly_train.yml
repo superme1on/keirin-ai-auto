@@ -49,6 +49,10 @@ jobs:
         run: |
           python src/train.py
 
+      - name: Append training growth log
+        run: |
+          python src/update_growth_log.py --kind train
+
       - name: Upload model artifact
         uses: actions/upload-artifact@v7
         with:
@@ -58,12 +62,13 @@ jobs:
             outputs/backtest_summary.csv
             outputs/backtest_summary.json
             outputs/latest_backtest.csv
+            outputs/growth_log.csv
           retention-days: 30
 
       - name: Commit model and backtest
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add models outputs/backtest_summary.csv outputs/backtest_summary.json outputs/latest_backtest.csv || true
+          git add models outputs/backtest_summary.csv outputs/backtest_summary.json outputs/latest_backtest.csv outputs/growth_log.csv || true
           git diff --staged --quiet || git commit -m "Update keirin model and backtest"
           git push

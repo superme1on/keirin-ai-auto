@@ -53,6 +53,10 @@ jobs:
         run: |
           python src/predict.py
 
+      - name: Append training growth log
+        run: |
+          python src/update_growth_log.py --kind train
+
       - name: Upload output artifact
         uses: actions/upload-artifact@v7
         with:
