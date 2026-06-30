@@ -17,6 +17,7 @@ GitHub Actionsで自動起動する競輪予想AIスターターです。
 - outputs/growth_log.csv に学習精度と損益の成長記録を追記
 - outputs/latest_backtest.csv に過去データでの損益検証を保存
 - outputs/profit_backtest_report.md に過去実オッズ込みの損益バックテストを保存
+- outputs/multi_bet_backtest_report.md に券種別の損益バックテストを保存
 - outputs/index.html に簡易表示を保存
 
 ## 本物データを使う場合
@@ -48,9 +49,10 @@ race_id,date,venue,race_no,player_id,car_no,age,score,win_rate,place2_rate,place
 pip install -r requirements.txt
 python src/make_sample_data.py --if-missing
 python src/ingest.py
-python src/build_history.py --months-back 24 --max-races 5000 --workers 8 --sleep-sec 0
+python src/build_history.py --months-back 24 --max-races 10000 --workers 8 --sleep-sec 0 --progress-every 250
 python src/train.py
 python src/profit_backtest.py --min-train-dates 30 --min-prob 0.10 --min-expected-profit 1200 --max-odds 200 --max-bets-per-race 2 --max-bets-per-day 40 --base-stake 100 --max-stake 500
+python src/multi_bet_backtest.py --min-train-dates 30 --retrain-every-days 7 --top-k 5 --min-prob 0.02 --min-expected-profit 100 --max-odds 300 --max-bets-per-race-type 2 --max-bets-per-day-type 40 --base-stake 100 --max-stake 500
 python src/fetch_today_entries.py
 python src/predict.py
 ```
@@ -100,6 +102,8 @@ BET_BASE_STAKE_YEN=100 BET_MAX_STAKE_YEN=500 python src/predict.py
 `outputs/walk_forward_summary.csv` は、結果を見ずに日付順で予想し、結果が出たら次の日の学習に追加する実戦形式の検証です。
 
 `outputs/profit_backtest_report.md` は、過去の実オッズを使った損益バックテストです。
+
+`outputs/multi_bet_backtest_report.md` は、2車単・2車複・ワイド・3連複・3連単などを横並びで比較した損益バックテストです。
 
 ## 注意
 

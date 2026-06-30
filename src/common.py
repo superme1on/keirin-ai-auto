@@ -12,6 +12,8 @@ MODEL_DIR = ROOT / "models"
 
 HISTORY_CSV = RAW_DIR / "history.csv"
 TODAY_CSV = RAW_DIR / "today_entries.csv"
+TODAY_ODDS_CSV = RAW_DIR / "today_odds.csv"
+HISTORY_ODDS_CSV = RAW_DIR / "history_odds.csv"
 HISTORY_TRIFECTA_ODDS_CSV = RAW_DIR / "history_trifecta_odds.csv"
 MODEL_PATH = MODEL_DIR / "win_model.joblib"
 METRICS_PATH = MODEL_DIR / "metrics.json"

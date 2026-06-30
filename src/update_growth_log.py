@@ -153,6 +153,40 @@ def read_profit_backtest_row():
     }
 
 
+def read_multi_bet_backtest_row():
+    path = OUTPUT_DIR / "multi_bet_backtest_overall.json"
+    by_type_path = OUTPUT_DIR / "multi_bet_backtest_summary.csv"
+    if not path.exists():
+        raise FileNotFoundError(path)
+    summary = json.loads(path.read_text(encoding="utf-8"))
+    best_note = "multi bet type walk-forward profit backtest"
+    if by_type_path.exists():
+        by_type = pd.read_csv(by_type_path)
+        if len(by_type):
+            best = by_type.sort_values("profit_yen", ascending=False).iloc[0]
+            best_note = f"best broad bet type: {best.get('bet_label', best.get('bet_type'))}, profit_yen={best.get('profit_yen')}"
+    return {
+        "logged_at_jst": datetime.now(ZoneInfo("Asia/Tokyo")).isoformat(timespec="seconds"),
+        "kind": "multi_bet_backtest",
+        "target_date": latest_prediction_date(),
+        "history_rows": np.nan,
+        "history_races": summary.get("history_races", np.nan),
+        "auc_binary": np.nan,
+        "brier_score_binary": np.nan,
+        "race_logloss": np.nan,
+        "top1_bets": np.nan,
+        "top1_hits": np.nan,
+        "top1_hit_rate": np.nan,
+        "settlement_bets": summary.get("overall_bets", np.nan),
+        "settlement_hits": summary.get("overall_hits", np.nan),
+        "stake_yen": summary.get("overall_stake_yen", np.nan),
+        "return_yen": summary.get("overall_return_yen", np.nan),
+        "profit_yen": summary.get("overall_profit_yen", np.nan),
+        "roi": summary.get("overall_roi", np.nan),
+        "note": best_note,
+    }
+
+
 def append_growth_row(kind):
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     if kind == "train":
@@ -163,6 +197,8 @@ def append_growth_row(kind):
         row = read_walk_forward_row()
     elif kind == "profit_backtest":
         row = read_profit_backtest_row()
+    elif kind == "multi_bet_backtest":
+        row = read_multi_bet_backtest_row()
     else:
         raise ValueError(f"unknown kind: {kind}")
 
@@ -179,7 +215,11 @@ def append_growth_row(kind):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--kind", choices=["train", "settle", "walk_forward", "profit_backtest"], required=True)
+    parser.add_argument(
+        "--kind",
+        choices=["train", "settle", "walk_forward", "profit_backtest", "multi_bet_backtest"],
+        required=True,
+    )
     args = parser.parse_args()
     append_growth_row(args.kind)
 

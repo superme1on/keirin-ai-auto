@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 import numpy as np
 import pandas as pd
 
-from common import HISTORY_CSV, HISTORY_TRIFECTA_ODDS_CSV, RAW_DIR, ensure_dirs
+from common import HISTORY_CSV, HISTORY_ODDS_CSV, HISTORY_TRIFECTA_ODDS_CSV, RAW_DIR, ensure_dirs
 from fetch_today_entries import (
     BASE_URL,
     days_since_last_race,
@@ -100,6 +100,23 @@ def collect_race_urls_for_cup(cup):
 
 
 RACE_CACHE_DIR = RAW_DIR / "race_cache"
+CACHE_VERSION = 2
+ODDS_COLUMNS = [
+    "date",
+    "venue",
+    "race_no",
+    "race_id",
+    "bet_type",
+    "buy",
+    "odds",
+    "min_odds",
+    "max_odds",
+    "odds_used",
+    "popularity_order",
+    "is_actual",
+    "actual_buy",
+    "source_url",
+]
 TRIFECTA_ODDS_COLUMNS = [
     "date",
     "venue",
@@ -112,6 +129,15 @@ TRIFECTA_ODDS_COLUMNS = [
     "actual_trifecta",
     "source_url",
 ]
+BET_SPECS = {
+    "trifecta": {"source": "trifecta", "key_len": 3, "ordered": True},
+    "trio": {"source": "trio", "key_len": 3, "ordered": False},
+    "exacta": {"source": "exacta", "key_len": 2, "ordered": True},
+    "quinella": {"source": "quinella", "key_len": 2, "ordered": False},
+    "quinella_place": {"source": "quinellaPlace", "key_len": 2, "ordered": False, "actual_kind": "top3_pairs"},
+    "bracket_exacta": {"source": "bracketExacta", "key_len": 2, "ordered": True, "key_kind": "bracket"},
+    "bracket_quinella": {"source": "bracketQuinella", "key_len": 2, "ordered": False, "key_kind": "bracket"},
+}
 
 
 def race_cache_path(url):
@@ -126,7 +152,7 @@ def parse_history_race(url, use_cache=True):
         data = json.loads(cache_path.read_text(encoding="utf-8"))
         rows = data.get("rows", [])
         odds_rows = data.get("odds_rows", [])
-        if rows and odds_rows:
+        if data.get("cache_version") == CACHE_VERSION and rows and odds_rows:
             return rows, odds_rows
 
     html = http_get(url)
@@ -192,45 +218,99 @@ def parse_history_race(url, use_cache=True):
         }
         rows.append(history_row)
 
-    odds_rows = []
-    actual_top3 = []
     entry_by_player = {str(e.get("playerId")): int(e.get("number")) for e in race_data.get("entries", []) if e.get("number")}
+    bracket_by_car = {
+        int(e.get("number")): int(e.get("bracketNumber"))
+        for e in race_data.get("entries", [])
+        if e.get("number") and e.get("bracketNumber")
+    }
+    actual_top3 = []
     for result in sorted(race_data.get("results", []) or [], key=lambda x: x.get("order", 999)):
         if result.get("order") in [1, 2, 3]:
             car = entry_by_player.get(str(result.get("playerId")))
             if car:
                 actual_top3.append(car)
-    actual_trifecta = "-".join(str(x) for x in actual_top3[:3]) if len(actual_top3) >= 3 else ""
-
-    trifecta_items = odds_data.get("trifecta", []) or race_data.get("trifecta", []) or []
-    for item in trifecta_items:
-        key = item.get("key", [])
-        if len(key) != 3 or item.get("absent"):
-            continue
-        buy = f"{int(key[0])}-{int(key[1])}-{int(key[2])}"
-        odds_rows.append(
-            {
-                "date": race_date,
-                "venue": venue,
-                "race_no": race_no,
-                "race_id": race_id,
-                "buy": buy,
-                "trifecta_odds": item.get("odds", np.nan),
-                "popularity_order": item.get("popularityOrder", np.nan),
-                "is_actual": buy == actual_trifecta,
-                "actual_trifecta": actual_trifecta,
-                "source_url": url,
-            }
-        )
+    odds_rows = build_odds_rows(odds_data or race_data, race_date, venue, race_no, race_id, actual_top3, bracket_by_car, url)
 
     if use_cache:
         RACE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        cache_path.write_text(json.dumps({"rows": rows, "odds_rows": odds_rows}, ensure_ascii=False), encoding="utf-8")
+        cache_path.write_text(
+            json.dumps({"cache_version": CACHE_VERSION, "rows": rows, "odds_rows": odds_rows}, ensure_ascii=False),
+            encoding="utf-8",
+        )
 
     return rows, odds_rows
 
 
-def collect_all_race_urls(cups, workers=1):
+def key_to_buy(key, ordered=True):
+    values = [int(x) for x in key]
+    if not ordered:
+        values = sorted(values)
+    return "-".join(str(x) for x in values)
+
+
+def actual_buy_sets(actual_top3, bracket_by_car):
+    cars = [int(x) for x in actual_top3[:3]]
+    top2 = cars[:2]
+    brackets = [bracket_by_car.get(car) for car in cars]
+    bracket_top2 = [b for b in brackets[:2] if b is not None]
+    actual = {
+        "trifecta": {key_to_buy(cars, ordered=True)} if len(cars) == 3 else set(),
+        "trio": {key_to_buy(cars, ordered=False)} if len(cars) == 3 else set(),
+        "exacta": {key_to_buy(top2, ordered=True)} if len(top2) == 2 else set(),
+        "quinella": {key_to_buy(top2, ordered=False)} if len(top2) == 2 else set(),
+        "bracket_exacta": {key_to_buy(bracket_top2, ordered=True)} if len(bracket_top2) == 2 else set(),
+        "bracket_quinella": {key_to_buy(bracket_top2, ordered=False)} if len(bracket_top2) == 2 else set(),
+    }
+    if len(cars) == 3:
+        actual["quinella_place"] = {
+            key_to_buy([cars[0], cars[1]], ordered=False),
+            key_to_buy([cars[0], cars[2]], ordered=False),
+            key_to_buy([cars[1], cars[2]], ordered=False),
+        }
+    else:
+        actual["quinella_place"] = set()
+    return actual
+
+
+def build_odds_rows(odds_data, race_date, venue, race_no, race_id, actual_top3, bracket_by_car, url):
+    actual = actual_buy_sets(actual_top3, bracket_by_car)
+    rows = []
+    for bet_type, spec in BET_SPECS.items():
+        items = odds_data.get(spec["source"], []) or []
+        for item in items:
+            key = item.get("key", [])
+            if len(key) != spec["key_len"] or item.get("absent"):
+                continue
+            buy = key_to_buy(key, ordered=spec.get("ordered", True))
+            odds = pd.to_numeric(item.get("odds"), errors="coerce")
+            min_odds = pd.to_numeric(item.get("minOdds"), errors="coerce")
+            max_odds = pd.to_numeric(item.get("maxOdds"), errors="coerce")
+            odds_used = odds
+            if bet_type == "quinella_place" and (pd.isna(odds_used) or odds_used <= 0):
+                odds_used = min_odds
+            rows.append(
+                {
+                    "date": race_date,
+                    "venue": venue,
+                    "race_no": race_no,
+                    "race_id": race_id,
+                    "bet_type": bet_type,
+                    "buy": buy,
+                    "odds": odds,
+                    "min_odds": min_odds,
+                    "max_odds": max_odds,
+                    "odds_used": odds_used,
+                    "popularity_order": item.get("popularityOrder", np.nan),
+                    "is_actual": buy in actual.get(bet_type, set()),
+                    "actual_buy": "|".join(sorted(actual.get(bet_type, set()))),
+                    "source_url": url,
+                }
+            )
+    return rows
+
+
+def collect_all_race_urls(cups, workers=1, progress_every=1):
     failures = []
     all_race_urls = []
     workers = max(int(workers or 1), 1)
@@ -239,7 +319,8 @@ def collect_all_race_urls(cups, workers=1):
             try:
                 race_urls = collect_race_urls_for_cup(cup)
                 all_race_urls.extend(race_urls)
-                print(f"cup {cup_i}/{len(cups)}: {cup.get('cup_url')} races={len(race_urls)}", flush=True)
+                if cup_i % progress_every == 0 or cup_i == len(cups):
+                    print(f"cup {cup_i}/{len(cups)}: {cup.get('cup_url')} races={len(race_urls)}", flush=True)
             except Exception as e:
                 failures.append({"cup": cup.get("id"), "url": cup.get("cup_url"), "error": str(e)})
                 print(f"failed cup {cup_i}/{len(cups)} {cup.get('cup_url')} error={e}", flush=True)
@@ -254,17 +335,18 @@ def collect_all_race_urls(cups, workers=1):
             try:
                 race_urls = future.result()
                 all_race_urls.extend(race_urls)
-                print(
-                    f"cup {done}/{len(cups)}: {cup.get('cup_url')} races={len(race_urls)} total={len(set(all_race_urls))}",
-                    flush=True,
-                )
+                if done % progress_every == 0 or done == len(cups):
+                    print(
+                        f"cup {done}/{len(cups)}: {cup.get('cup_url')} races={len(race_urls)} total={len(set(all_race_urls))}",
+                        flush=True,
+                    )
             except Exception as e:
                 failures.append({"cup": cup.get("id"), "url": cup.get("cup_url"), "error": str(e)})
                 print(f"failed cup {cup_i}/{len(cups)} {cup.get('cup_url')} error={e}", flush=True)
     return sorted(set(all_race_urls)), failures
 
 
-def fetch_history_races(race_urls, sleep_sec=0.2, use_cache=True, workers=1):
+def fetch_history_races(race_urls, sleep_sec=0.2, use_cache=True, workers=1, progress_every=1):
     failures = []
     all_rows = []
     all_odds_rows = []
@@ -275,7 +357,8 @@ def fetch_history_races(race_urls, sleep_sec=0.2, use_cache=True, workers=1):
                 rows, odds_rows = parse_history_race(race_url, use_cache=use_cache)
                 all_rows.extend(rows)
                 all_odds_rows.extend(odds_rows)
-                print(f"history race {race_count}/{len(race_urls)}: {race_url} rows={len(rows)} odds={len(odds_rows)}", flush=True)
+                if race_count % progress_every == 0 or race_count == len(race_urls):
+                    print(f"history race {race_count}/{len(race_urls)}: {race_url} rows={len(rows)} odds={len(odds_rows)}", flush=True)
             except Exception as e:
                 failures.append({"race_url": race_url, "error": str(e)})
                 print(f"failed race {race_count}/{len(race_urls)}: {race_url} error={e}", flush=True)
@@ -290,14 +373,15 @@ def fetch_history_races(race_urls, sleep_sec=0.2, use_cache=True, workers=1):
                 rows, odds_rows = future.result()
                 all_rows.extend(rows)
                 all_odds_rows.extend(odds_rows)
-                print(f"history race {race_count}/{len(race_urls)}: {race_url} rows={len(rows)} odds={len(odds_rows)}", flush=True)
+                if race_count % progress_every == 0 or race_count == len(race_urls):
+                    print(f"history race {race_count}/{len(race_urls)}: {race_url} rows={len(rows)} odds={len(odds_rows)}", flush=True)
             except Exception as e:
                 failures.append({"race_url": race_url, "error": str(e)})
                 print(f"failed race {race_count}/{len(race_urls)}: {race_url} error={e}", flush=True)
     return all_rows, all_odds_rows, failures
 
 
-def build_history(months_back=1, max_cups=None, max_races=None, sleep_sec=0.2, use_cache=True, workers=1):
+def build_history(months_back=1, max_cups=None, max_races=None, sleep_sec=0.2, use_cache=True, workers=1, progress_every=1):
     ensure_dirs()
     cups = collect_cups(months_back=months_back)
     if max_cups:
@@ -305,14 +389,16 @@ def build_history(months_back=1, max_cups=None, max_races=None, sleep_sec=0.2, u
     if not cups:
         raise ValueError("no past cups found")
 
-    all_race_urls, failures = collect_all_race_urls(cups, workers=workers)
+    all_race_urls, failures = collect_all_race_urls(cups, workers=workers, progress_every=progress_every)
     if max_races and len(all_race_urls) > max_races:
         indexes = np.linspace(0, len(all_race_urls) - 1, max_races, dtype=int)
         race_urls_to_fetch = [all_race_urls[i] for i in indexes]
     else:
         race_urls_to_fetch = all_race_urls
 
-    all_rows, all_odds_rows, race_failures = fetch_history_races(race_urls_to_fetch, sleep_sec, use_cache, workers=workers)
+    all_rows, all_odds_rows, race_failures = fetch_history_races(
+        race_urls_to_fetch, sleep_sec, use_cache, workers=workers, progress_every=progress_every
+    )
     failures.extend(race_failures)
 
     if not all_rows:
@@ -322,10 +408,21 @@ def build_history(months_back=1, max_cups=None, max_races=None, sleep_sec=0.2, u
     df = df.drop_duplicates(["race_id", "player_id"]).sort_values(["date", "venue", "race_no", "car_no"])
     df.to_csv(HISTORY_CSV, index=False)
 
-    odds_df = pd.DataFrame(all_odds_rows, columns=TRIFECTA_ODDS_COLUMNS)
+    odds_df = pd.DataFrame(all_odds_rows, columns=ODDS_COLUMNS)
     if len(odds_df):
-        odds_df = odds_df.drop_duplicates(["race_id", "buy"]).sort_values(["date", "venue", "race_no", "popularity_order", "buy"])
-    odds_df.to_csv(HISTORY_TRIFECTA_ODDS_CSV, index=False)
+        odds_df = odds_df.drop_duplicates(["race_id", "bet_type", "buy"]).sort_values(
+            ["date", "venue", "race_no", "bet_type", "popularity_order", "buy"]
+        )
+    odds_df.to_csv(HISTORY_ODDS_CSV, index=False)
+
+    trifecta_df = odds_df[odds_df["bet_type"].eq("trifecta")].copy() if len(odds_df) else pd.DataFrame(columns=ODDS_COLUMNS)
+    if len(trifecta_df):
+        trifecta_df["trifecta_odds"] = trifecta_df["odds_used"]
+        trifecta_df["actual_trifecta"] = trifecta_df["actual_buy"]
+        trifecta_df = trifecta_df[TRIFECTA_ODDS_COLUMNS]
+    else:
+        trifecta_df = pd.DataFrame(columns=TRIFECTA_ODDS_COLUMNS)
+    trifecta_df.to_csv(HISTORY_TRIFECTA_ODDS_CSV, index=False)
 
     metadata = {
         "source": "WINTICKET historical racecards",
@@ -336,7 +433,10 @@ def build_history(months_back=1, max_cups=None, max_races=None, sleep_sec=0.2, u
         "fetched_races": len(race_urls_to_fetch),
         "races": int(df["race_id"].nunique()),
         "rows": int(len(df)),
-        "trifecta_odds_rows": int(len(odds_df)),
+        "odds_rows": int(len(odds_df)),
+        "odds_races": int(odds_df["race_id"].nunique()) if len(odds_df) else 0,
+        "bet_types": sorted(odds_df["bet_type"].dropna().unique().tolist()) if len(odds_df) else [],
+        "trifecta_odds_rows": int(len(trifecta_df)),
         "workers": int(workers or 1),
         "failures": failures,
     }
@@ -353,8 +453,9 @@ def main():
     parser.add_argument("--sleep-sec", type=float, default=0.2)
     parser.add_argument("--no-cache", action="store_true")
     parser.add_argument("--workers", type=int, default=1)
+    parser.add_argument("--progress-every", type=int, default=1)
     args = parser.parse_args()
-    build_history(args.months_back, args.max_cups, args.max_races, args.sleep_sec, not args.no_cache, args.workers)
+    build_history(args.months_back, args.max_cups, args.max_races, args.sleep_sec, not args.no_cache, args.workers, args.progress_every)
 
 
 if __name__ == "__main__":

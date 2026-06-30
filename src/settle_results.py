@@ -19,6 +19,41 @@ SETTLEMENT_SUMMARY_CSV = OUTPUT_DIR / "settlement_summary.csv"
 REPORT_MD = OUTPUT_DIR / "japanese_report.md"
 
 
+def key_to_buy(values, ordered=True):
+    values = [int(x) for x in values]
+    if not ordered:
+        values = sorted(values)
+    return "-".join(str(x) for x in values)
+
+
+def actual_buy_sets(top3, bracket_by_car):
+    cars = [int(x) for x in top3[:3]]
+    top2 = cars[:2]
+    brackets = [bracket_by_car.get(car) for car in cars]
+    bracket_top2 = [b for b in brackets[:2] if b is not None]
+    actual = {
+        "trifecta": key_to_buy(cars, ordered=True) if len(cars) == 3 else "",
+        "trio": key_to_buy(cars, ordered=False) if len(cars) == 3 else "",
+        "exacta": key_to_buy(top2, ordered=True) if len(top2) == 2 else "",
+        "quinella": key_to_buy(top2, ordered=False) if len(top2) == 2 else "",
+        "bracket_exacta": key_to_buy(bracket_top2, ordered=True) if len(bracket_top2) == 2 else "",
+        "bracket_quinella": key_to_buy(bracket_top2, ordered=False) if len(bracket_top2) == 2 else "",
+    }
+    if len(cars) == 3:
+        actual["quinella_place"] = "|".join(
+            sorted(
+                [
+                    key_to_buy([cars[0], cars[1]], ordered=False),
+                    key_to_buy([cars[0], cars[2]], ordered=False),
+                    key_to_buy([cars[1], cars[2]], ordered=False),
+                ]
+            )
+        )
+    else:
+        actual["quinella_place"] = ""
+    return actual
+
+
 def parse_result_page(url):
     html = http_get(url)
     state = extract_preloaded_state(html)
@@ -29,6 +64,11 @@ def parse_result_page(url):
     race = race_data["race"]
     race_id = str(race["id"])
     entry_by_player = {str(e.get("playerId")): int(e.get("number")) for e in race_data.get("entries", [])}
+    bracket_by_car = {
+        int(e.get("number")): int(e.get("bracketNumber"))
+        for e in race_data.get("entries", [])
+        if e.get("number") and e.get("bracketNumber")
+    }
 
     ordered = []
     for result in race_data.get("results", []) or []:
@@ -40,6 +80,7 @@ def parse_result_page(url):
     ordered = sorted(ordered)
     top3 = [car_no for order, car_no, player_id in ordered if order in [1, 2, 3]][:3]
     winning_buy = "-".join(str(x) for x in top3) if len(top3) == 3 else ""
+    actual = actual_buy_sets(top3, bracket_by_car)
 
     winning_odds = np.nan
     for item in race_data.get("trifecta", []) or []:
@@ -49,7 +90,7 @@ def parse_result_page(url):
             winning_odds = pd.to_numeric(item.get("odds"), errors="coerce")
             break
 
-    return {
+    result = {
         "race_id": race_id,
         "actual_trifecta": winning_buy,
         "actual_trifecta_odds": winning_odds,
@@ -57,6 +98,9 @@ def parse_result_page(url):
         "decided_at": race.get("decidedAt"),
         "source_url": url,
     }
+    for bet_type, buy in actual.items():
+        result[f"actual_{bet_type}"] = buy
+    return result
 
 
 def fetch_results(sleep_sec=0.2):
@@ -137,10 +181,12 @@ def build_report(selected, summary):
     ]
     top = selected.sort_values(["date", "venue", "race_no", "candidate_rank"]).head(20)
     for _, row in top.iterrows():
-        result = "的中" if row["is_hit"] else f"外れ({row.get('actual_trifecta', '')})"
+        result = "的中" if row["is_hit"] else f"外れ({row.get('actual_for_bet_type', row.get('actual_trifecta', ''))})"
+        prob = row.get("prob", row.get("trifecta_prob_approx", np.nan))
+        odds = row.get("odds_used", row.get("trifecta_odds", np.nan))
         lines.append(
             f"| {row['date']} | {row['venue']} | {row['race_no']} | {row['buy']} | "
-            f"{row['trifecta_prob_approx']:.3f} | {row['trifecta_odds']:.1f} | "
+            f"{prob:.3f} | {odds:.1f} | "
             f"{int(row['expected_profit_yen']):,}円 | {result} | {int(row['actual_profit_yen']):,}円 |"
         )
 
@@ -159,13 +205,23 @@ def main():
     ensure_dirs()
     results = fetch_results()
     bets = pd.read_csv(LATEST_BETS_CSV, dtype={"race_id": str})
+    if "bet_type" not in bets.columns:
+        bets["bet_type"] = "trifecta"
 
     settled = bets.merge(results, on="race_id", how="left")
     settled["is_selected"] = pd.to_numeric(settled["expected_profit_yen"], errors="coerce").fillna(-10**9) > args.min_expected_profit
-    settled["is_hit"] = settled["buy"].astype(str).eq(settled["actual_trifecta"].astype(str))
+    settled["actual_for_bet_type"] = settled.apply(
+        lambda row: row.get(f"actual_{row.get('bet_type', 'trifecta')}", row.get("actual_trifecta", "")),
+        axis=1,
+    )
+    settled["is_hit"] = settled.apply(
+        lambda row: str(row["buy"]) in str(row.get("actual_for_bet_type", "")).split("|"),
+        axis=1,
+    )
+    return_col = "return_if_hit_yen" if "return_if_hit_yen" in settled.columns else "trifecta_return_yen"
     settled["actual_return_yen"] = np.where(
         settled["is_hit"],
-        pd.to_numeric(settled["trifecta_return_yen"], errors="coerce").fillna(0),
+        pd.to_numeric(settled.get(return_col, 0), errors="coerce").fillna(0),
         0,
     )
     settled["actual_profit_yen"] = settled["actual_return_yen"] - pd.to_numeric(settled["stake_yen"], errors="coerce").fillna(0)

@@ -11,11 +11,35 @@ import numpy as np
 import pandas as pd
 import requests
 
-from common import ensure_dirs, RAW_DIR, TODAY_CSV
+from common import ensure_dirs, RAW_DIR, TODAY_CSV, TODAY_ODDS_CSV
 
 BASE_URL = "https://www.winticket.jp"
 RACECARD_URL = f"{BASE_URL}/keirin/racecard"
 TRIFECTA_ODDS_CSV = RAW_DIR / "today_trifecta_odds.csv"
+ODDS_COLUMNS = [
+    "date",
+    "venue",
+    "race_no",
+    "race_id",
+    "bet_type",
+    "buy",
+    "odds",
+    "min_odds",
+    "max_odds",
+    "odds_used",
+    "popularity_order",
+    "source_url",
+]
+TRIFECTA_ODDS_COLUMNS = ["date", "venue", "race_no", "race_id", "buy", "trifecta_odds", "popularity_order", "source_url"]
+BET_SPECS = {
+    "trifecta": {"source": "trifecta", "key_len": 3, "ordered": True},
+    "trio": {"source": "trio", "key_len": 3, "ordered": False},
+    "exacta": {"source": "exacta", "key_len": 2, "ordered": True},
+    "quinella": {"source": "quinella", "key_len": 2, "ordered": False},
+    "quinella_place": {"source": "quinellaPlace", "key_len": 2, "ordered": False},
+    "bracket_exacta": {"source": "bracketExacta", "key_len": 2, "ordered": True},
+    "bracket_quinella": {"source": "bracketQuinella", "key_len": 2, "ordered": False},
+}
 
 
 def http_get(url):
@@ -116,6 +140,45 @@ def get_venue_name(state, race_data):
     return ""
 
 
+def key_to_buy(key, ordered=True):
+    values = [int(x) for x in key]
+    if not ordered:
+        values = sorted(values)
+    return "-".join(str(x) for x in values)
+
+
+def build_odds_rows(odds_data, race_date, venue, race_no, race_id, url):
+    rows = []
+    for bet_type, spec in BET_SPECS.items():
+        for item in odds_data.get(spec["source"], []) or []:
+            key = item.get("key", [])
+            if len(key) != spec["key_len"] or item.get("absent"):
+                continue
+            odds = pd.to_numeric(item.get("odds"), errors="coerce")
+            min_odds = pd.to_numeric(item.get("minOdds"), errors="coerce")
+            max_odds = pd.to_numeric(item.get("maxOdds"), errors="coerce")
+            odds_used = odds
+            if bet_type == "quinella_place" and (pd.isna(odds_used) or odds_used <= 0):
+                odds_used = min_odds
+            rows.append(
+                {
+                    "date": race_date,
+                    "venue": venue,
+                    "race_no": race_no,
+                    "race_id": race_id,
+                    "bet_type": bet_type,
+                    "buy": key_to_buy(key, ordered=spec.get("ordered", True)),
+                    "odds": odds,
+                    "min_odds": min_odds,
+                    "max_odds": max_odds,
+                    "odds_used": odds_used,
+                    "popularity_order": item.get("popularityOrder", np.nan),
+                    "source_url": url,
+                }
+            )
+    return rows
+
+
 def parse_race_page(url):
     html = http_get(url)
     state = extract_preloaded_state(html)
@@ -173,23 +236,7 @@ def parse_race_page(url):
         )
 
     odds_data = find_query_data(state, "FETCH_KEIRIN_RACE_ODDS")
-    odds_rows = []
-    for item in odds_data.get("trifecta", []) or []:
-        key = item.get("key", [])
-        if len(key) != 3 or item.get("absent"):
-            continue
-        odds_rows.append(
-            {
-                "date": race_date,
-                "venue": venue,
-                "race_no": race_no,
-                "race_id": race_id,
-                "buy": f"{int(key[0])}-{int(key[1])}-{int(key[2])}",
-                "trifecta_odds": item.get("odds", np.nan),
-                "popularity_order": item.get("popularityOrder", np.nan),
-                "source_url": url,
-            }
-        )
+    odds_rows = build_odds_rows(odds_data, race_date, venue, race_no, race_id, url)
 
     return entry_rows, odds_rows
 
@@ -229,10 +276,18 @@ def fetch_today_entries(race_date=None, max_races=None, sleep_sec=0.2):
     entries_df = pd.DataFrame(all_entries).sort_values(["date", "venue", "race_no", "car_no"])
     entries_df.to_csv(TODAY_CSV, index=False)
 
-    odds_df = pd.DataFrame(all_odds)
+    odds_df = pd.DataFrame(all_odds, columns=ODDS_COLUMNS)
     if len(odds_df):
-        odds_df = odds_df.sort_values(["date", "venue", "race_no", "popularity_order", "buy"])
-    odds_df.to_csv(TRIFECTA_ODDS_CSV, index=False)
+        odds_df = odds_df.sort_values(["date", "venue", "race_no", "bet_type", "popularity_order", "buy"])
+    odds_df.to_csv(TODAY_ODDS_CSV, index=False)
+
+    trifecta_df = odds_df[odds_df["bet_type"].eq("trifecta")].copy() if len(odds_df) else pd.DataFrame(columns=ODDS_COLUMNS)
+    if len(trifecta_df):
+        trifecta_df["trifecta_odds"] = trifecta_df["odds_used"]
+        trifecta_df = trifecta_df[TRIFECTA_ODDS_COLUMNS]
+    else:
+        trifecta_df = pd.DataFrame(columns=TRIFECTA_ODDS_COLUMNS)
+    trifecta_df.to_csv(TRIFECTA_ODDS_CSV, index=False)
 
     metadata = {
         "source": "WINTICKET racecard",
@@ -241,7 +296,9 @@ def fetch_today_entries(race_date=None, max_races=None, sleep_sec=0.2):
         "fetched_at_jst": datetime.now(ZoneInfo("Asia/Tokyo")).isoformat(timespec="seconds"),
         "races": len(links),
         "entry_rows": int(len(entries_df)),
-        "trifecta_odds_rows": int(len(odds_df)),
+        "odds_rows": int(len(odds_df)),
+        "bet_types": sorted(odds_df["bet_type"].dropna().unique().tolist()) if len(odds_df) else [],
+        "trifecta_odds_rows": int(len(trifecta_df)),
         "failures": failures,
     }
     (RAW_DIR / "today_entries_metadata.json").write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
