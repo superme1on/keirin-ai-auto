@@ -1,0 +1,61 @@
+name: settle-keirin-results
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 23 * * *"
+      timezone: "Asia/Tokyo"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: settle-keirin-results
+  cancel-in-progress: false
+
+jobs:
+  settle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Fetch today entries for result URLs
+        run: |
+          python src/fetch_today_entries.py
+
+      - name: Settle predictions
+        run: |
+          python src/settle_results.py
+
+      - name: Upload settlement artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: keirin-settlement
+          path: |
+            outputs/purchase_plan.csv
+            outputs/settled_bets.csv
+            outputs/settlement_summary.csv
+            outputs/japanese_report.md
+          retention-days: 30
+
+      - name: Commit settlement
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add outputs/purchase_plan.csv outputs/settled_bets.csv outputs/settlement_summary.csv outputs/japanese_report.md || true
+          git diff --staged --quiet || git commit -m "Settle keirin predictions"
+          git push

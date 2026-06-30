@@ -11,6 +11,7 @@ GitHub Actionsで自動起動する競輪予想AIスターターです。
 - データが取れない場合はサンプルデータで動作確認
 - outputs/latest_predictions.csv に予想結果を保存
 - outputs/latest_bets.csv に3連単候補と実オッズが取れた場合の払戻を保存
+- outputs/japanese_report.md に日本語の購入理由と損益結果を保存
 - outputs/latest_backtest.csv に過去データでの損益検証を保存
 - outputs/index.html に簡易表示を保存
 
@@ -72,6 +73,12 @@ BET_STAKE_YEN=500 python src/predict.py
 - `trifecta_return_yen`: 当たった場合の払戻金
 - `trifecta_profit_yen`: 当たった場合の利益
 - `expected_profit_yen`: AI確率と3連単オッズから見た期待利益
+
+`outputs/purchase_plan.csv` は、`expected_profit_yen > 0` の買い目だけを抜き出した購入予定です。
+
+`outputs/settled_bets.csv` と `outputs/settlement_summary.csv` は、レース結果取得後の損益集計です。
+
+`outputs/japanese_report.md` は、購入条件、損益、主な買い目、選んだ理由を日本語でまとめたレポートです。
 
 ## 注意
 
