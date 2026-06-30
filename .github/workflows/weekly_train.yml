@@ -40,9 +40,10 @@ jobs:
         run: |
           python src/ingest.py
 
-      - name: Generate sample data if missing
+      - name: Build real history if no external history is configured
+        if: ${{ secrets.KEIRIN_HISTORY_CSV_URL == '' }}
         run: |
-          python src/make_sample_data.py --if-missing
+          python src/build_history.py --months-back 1 --max-races 600
 
       - name: Train
         run: |

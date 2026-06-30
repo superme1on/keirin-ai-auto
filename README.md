@@ -8,6 +8,7 @@ GitHub Actionsで自動起動する競輪予想AIスターターです。
 - 毎朝、最新の過去データでモデル再学習
 - 週1回、定期的にモデル再学習
 - WINTICKETの出走表を自動取得
+- WINTICKETの過去結果から学習用 `history.csv` を自動構築
 - データが取れない場合はサンプルデータで動作確認
 - outputs/latest_predictions.csv に予想結果を保存
 - outputs/latest_bets.csv に3連単候補と実オッズが取れた場合の払戻を保存
@@ -44,6 +45,7 @@ race_id,date,venue,race_no,player_id,car_no,age,score,win_rate,place2_rate,place
 pip install -r requirements.txt
 python src/make_sample_data.py --if-missing
 python src/ingest.py
+python src/build_history.py --months-back 1 --max-races 300
 python src/train.py
 python src/predict.py
 ```

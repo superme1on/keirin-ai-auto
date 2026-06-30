@@ -1,3 +1,3 @@
 strategy,bets,hits,hit_rate,stake_yen,win_return_yen,loss_amount_yen,profit_yen,roi
-top_p_win_each_race,184,78,0.42391304347826086,18400,15130,10600,-3270,-0.17771739130434783
-positive_expected_value_all,328,35,0.10670731707317073,32800,19010,29300,-13790,-0.42042682926829267
+top_p_win_each_race,36,12,0.3333333333333333,3600,0,2400,-2400,-0.6666666666666666
+positive_expected_value_all,0,0,,0,0,0,0,
