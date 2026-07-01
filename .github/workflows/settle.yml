@@ -3,8 +3,8 @@ name: settle-keirin-results
 on:
   workflow_dispatch:
   schedule:
-    - cron: "30 23 * * *"
-      timezone: "Asia/Tokyo"
+    # 23:30 JST
+    - cron: "30 14 * * *"
 
 permissions:
   contents: write
@@ -16,7 +16,7 @@ concurrency:
 jobs:
   settle:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 180
 
     steps:
       - name: Checkout
@@ -45,6 +45,21 @@ jobs:
         run: |
           python src/update_growth_log.py --kind settle
 
+      - name: Learn from latest settled data
+        if: ${{ secrets.KEIRIN_HISTORY_CSV_URL == '' }}
+        env:
+          HISTORY_MONTHS_BACK: 24
+          HISTORY_MAX_RACES: 10000
+          HISTORY_WORKERS: 8
+        run: |
+          python src/build_history.py --months-back "$HISTORY_MONTHS_BACK" --max-races "$HISTORY_MAX_RACES" --workers "$HISTORY_WORKERS" --sleep-sec 0 --progress-every 250
+          python src/train.py
+          python src/update_growth_log.py --kind train
+
+      - name: Update trial report
+        run: |
+          python src/report_growth.py --days 31 --start-date 2026-07-01
+
       - name: Upload settlement artifact
         uses: actions/upload-artifact@v7
         with:
@@ -55,12 +70,15 @@ jobs:
             outputs/settlement_summary.csv
             outputs/japanese_report.md
             outputs/growth_log.csv
+            outputs/trial_report.md
+            models/
           retention-days: 30
 
       - name: Commit settlement
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add outputs/purchase_plan.csv outputs/settled_bets.csv outputs/settlement_summary.csv outputs/japanese_report.md outputs/growth_log.csv || true
+          git add models outputs/purchase_plan.csv outputs/settled_bets.csv outputs/settlement_summary.csv outputs/japanese_report.md outputs/growth_log.csv outputs/trial_report.md data/raw/history.csv data/raw/history_odds.csv data/raw/history_trifecta_odds.csv data/raw/history_metadata.json || true
           git diff --staged --quiet || git commit -m "Settle keirin predictions"
+          git pull --rebase
           git push

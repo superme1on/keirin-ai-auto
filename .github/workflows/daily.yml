@@ -3,8 +3,8 @@ name: daily-keirin-predict
 on:
   workflow_dispatch:
   schedule:
-    - cron: "45 6 * * *"
-      timezone: "Asia/Tokyo"
+    # 06:45 JST
+    - cron: "45 21 * * *"
 
 permissions:
   contents: write
@@ -71,4 +71,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add outputs models || true
           git diff --staged --quiet || git commit -m "Update keirin predictions"
+          git pull --rebase
           git push

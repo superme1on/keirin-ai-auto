@@ -5,16 +5,17 @@ GitHub Actionsで自動起動する競輪予想AIスターターです。
 ## できること
 
 - 毎朝、自動で予想CSVを作成
-- 毎朝、最新の過去データでモデル再学習
+- 毎晩、決済後に最新の過去データでモデル再学習
 - 週1回、定期的にモデル再学習
 - WINTICKETの出走表を自動取得
 - WINTICKETの過去結果から学習用 `history.csv` を自動構築
 - データが取れない場合はサンプルデータで動作確認
 - outputs/latest_predictions.csv に予想結果を保存
-- outputs/latest_bets.csv に実際に買う3連単候補と購入額を保存
-- outputs/latest_bet_candidates.csv に検討した全3連単候補を保存
+- outputs/latest_bets.csv に実際に買う複数券種の候補と購入額を保存
+- outputs/latest_bet_candidates.csv に検討した複数券種の候補を保存
 - outputs/japanese_report.md に日本語の購入理由と損益結果を保存
 - outputs/growth_log.csv に学習精度と損益の成長記録を追記
+- outputs/trial_report.md に直近31日の実購入ベース損益を保存
 - outputs/latest_backtest.csv に過去データでの損益検証を保存
 - outputs/profit_backtest_report.md に過去実オッズ込みの損益バックテストを保存
 - outputs/multi_bet_backtest_report.md に券種別の損益バックテストを保存
@@ -57,11 +58,8 @@ python src/fetch_today_entries.py
 python src/predict.py
 ```
 
-3連単の買い目は、損益バックテストで絞った条件をデフォルトにしています。
+買い目は、券種別バックテストで絞った条件をデフォルトにしています。
 
-- `BET_MIN_TRIFECTA_PROB`: 3連単近似確率の下限。標準は `0.10`
-- `BET_MIN_EXPECTED_PROFIT_100YEN`: 100円購入あたりの期待利益下限。標準は `1200`
-- `BET_MAX_TRIFECTA_ODDS`: オッズ上限。標準は `200`
 - `BET_BASE_STAKE_YEN`: 最低購入額。標準は `100`
 - `BET_MAX_STAKE_YEN`: 期待値が高いときの購入上限。標準は `500`
 
@@ -81,13 +79,14 @@ BET_BASE_STAKE_YEN=100 BET_MAX_STAKE_YEN=500 python src/predict.py
 
 `outputs/backtest_summary.csv` は過去データのテスト期間で、実際に当たり外れを判定した損益サマリーです。
 
-`outputs/latest_bets.csv` には、AIが実際に買う3連単候補だけを出します。WINTICKETから3連単オッズが取れた場合は、以下も入ります。
+`outputs/latest_bets.csv` には、AIが実際に買う候補だけを出します。WINTICKETからオッズが取れた場合は、以下も入ります。
 
-- `trifecta_odds`: 3連単オッズ
-- `trifecta_return_yen`: 当たった場合の払戻金
-- `trifecta_profit_yen`: 当たった場合の利益
-- `expected_profit_100yen`: 100円買った場合の期待利益
-- `expected_profit_yen`: AI確率と3連単オッズから見た期待利益
+- `bet_type`: 券種
+- `bet_label`: 日本語の券種名
+- `buy`: 買い目
+- `odds_used`: 判定に使ったオッズ
+- `return_if_hit_yen`: 当たった場合の払戻金
+- `expected_profit_yen`: AI確率とオッズから見た期待利益
 
 `outputs/latest_bet_candidates.csv` は、AIが検討した全3連単候補です。
 
@@ -98,6 +97,8 @@ BET_BASE_STAKE_YEN=100 BET_MAX_STAKE_YEN=500 python src/predict.py
 `outputs/japanese_report.md` は、購入条件、損益、主な買い目、選んだ理由を日本語でまとめたレポートです。
 
 `outputs/growth_log.csv` は、学習時のAUC、本命的中率、結果精算後の損益を追記していく成長記録です。
+
+`outputs/trial_report.md` は、直近31日の決済ログを実購入ベースで合算した1か月トライアル用レポートです。
 
 `outputs/walk_forward_summary.csv` は、結果を見ずに日付順で予想し、結果が出たら次の日の学習に追加する実戦形式の検証です。
 

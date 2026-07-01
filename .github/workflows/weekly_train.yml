@@ -3,8 +3,8 @@ name: weekly-keirin-train
 on:
   workflow_dispatch:
   schedule:
-    - cron: "30 5 * * 1"
-      timezone: "Asia/Tokyo"
+    # Monday 05:30 JST
+    - cron: "30 20 * * 0"
 
 permissions:
   contents: write
@@ -87,4 +87,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add models outputs/backtest_summary.csv outputs/backtest_summary.json outputs/latest_backtest.csv outputs/growth_log.csv outputs/multi_bet_backtest_bets.csv outputs/multi_bet_backtest_summary.csv outputs/multi_bet_backtest_overall.json outputs/multi_bet_backtest_report.md outputs/multi_bet_period_summary.csv outputs/multi_bet_threshold_sweep.csv outputs/multi_bet_recommended_conditions_periods.csv || true
           git diff --staged --quiet || git commit -m "Update keirin model and backtest"
+          git pull --rebase
           git push
