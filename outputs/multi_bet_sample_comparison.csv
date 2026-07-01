@@ -1,0 +1,3 @@
+sample,candidate_races,fetched_races,history_races,history_rows,odds_rows,auc_binary,race_logloss,overall_bets,overall_hits,overall_stake_yen,overall_return_yen,overall_profit_yen,overall_roi,best_broad_type,best_broad_profit_yen,wide_profit_yen,trio_profit_yen,trifecta_profit_yen
+sample_offset0,52774,10000,9970,69833,3582150,0.7729103315261602,1.528678091159061,54521,1074,8879000,9454780,575780,0.0648473927244059,trio,576760,307360,576760,248490
+sample_offset1,52793,10000,9971,69902,3573286,0.7759166735732581,1.550268567824171,54051,1085,8719700,10082770,1363070,0.15632074497975848,trifecta,757820,109440,555200,757820

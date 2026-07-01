@@ -1,5 +1,5 @@
 {
-  "created_at_jst": "2026-07-01T08:15:50+09:00",
+  "created_at_jst": "2026-07-01T19:21:11+09:00",
   "mode": "multi bet type walk-forward profit backtest",
   "features": [
     "race_no",
@@ -21,8 +21,8 @@
     "race_type_code",
     "player_id_code"
   ],
-  "history_races": 9970,
-  "odds_races": 9979,
+  "history_races": 9971,
+  "odds_races": 9982,
   "params": {
     "min_train_dates": 30,
     "retrain_every_days": 7,
@@ -36,11 +36,11 @@
     "max_stake": 500,
     "wide_odds_policy": "ワイドは下限オッズを使用"
   },
-  "overall_bets": 54521,
-  "overall_hits": 1074,
-  "overall_hit_rate": 0.01969883164285321,
-  "overall_stake_yen": 8879000,
-  "overall_return_yen": 9454780,
-  "overall_profit_yen": 575780,
-  "overall_roi": 0.0648473927244059
+  "overall_bets": 54051,
+  "overall_hits": 1085,
+  "overall_hit_rate": 0.020073634160330058,
+  "overall_stake_yen": 8719700,
+  "overall_return_yen": 10082770,
+  "overall_profit_yen": 1363070,
+  "overall_roi": 0.15632074497975848
 }

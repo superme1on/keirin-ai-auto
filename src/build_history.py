@@ -381,7 +381,17 @@ def fetch_history_races(race_urls, sleep_sec=0.2, use_cache=True, workers=1, pro
     return all_rows, all_odds_rows, failures
 
 
-def build_history(months_back=1, max_cups=None, max_races=None, sleep_sec=0.2, use_cache=True, workers=1, progress_every=1):
+def build_history(
+    months_back=1,
+    max_cups=None,
+    max_races=None,
+    sleep_sec=0.2,
+    use_cache=True,
+    workers=1,
+    progress_every=1,
+    sample_mod=None,
+    sample_offset=0,
+):
     ensure_dirs()
     cups = collect_cups(months_back=months_back)
     if max_cups:
@@ -390,7 +400,17 @@ def build_history(months_back=1, max_cups=None, max_races=None, sleep_sec=0.2, u
         raise ValueError("no past cups found")
 
     all_race_urls, failures = collect_all_race_urls(cups, workers=workers, progress_every=progress_every)
-    if max_races and len(all_race_urls) > max_races:
+    if sample_mod:
+        sample_mod = int(sample_mod)
+        sample_offset = int(sample_offset)
+        if sample_mod <= 0:
+            raise ValueError("--sample-mod must be positive")
+        if sample_offset < 0 or sample_offset >= sample_mod:
+            raise ValueError("--sample-offset must be between 0 and sample_mod - 1")
+        race_urls_to_fetch = all_race_urls[sample_offset::sample_mod]
+        if max_races:
+            race_urls_to_fetch = race_urls_to_fetch[:max_races]
+    elif max_races and len(all_race_urls) > max_races:
         indexes = np.linspace(0, len(all_race_urls) - 1, max_races, dtype=int)
         race_urls_to_fetch = [all_race_urls[i] for i in indexes]
     else:
@@ -431,6 +451,8 @@ def build_history(months_back=1, max_cups=None, max_races=None, sleep_sec=0.2, u
         "cups": len(cups),
         "candidate_races": len(all_race_urls),
         "fetched_races": len(race_urls_to_fetch),
+        "sample_mod": sample_mod,
+        "sample_offset": sample_offset if sample_mod else None,
         "races": int(df["race_id"].nunique()),
         "rows": int(len(df)),
         "odds_rows": int(len(odds_df)),
@@ -454,8 +476,20 @@ def main():
     parser.add_argument("--no-cache", action="store_true")
     parser.add_argument("--workers", type=int, default=1)
     parser.add_argument("--progress-every", type=int, default=1)
+    parser.add_argument("--sample-mod", type=int, default=None)
+    parser.add_argument("--sample-offset", type=int, default=0)
     args = parser.parse_args()
-    build_history(args.months_back, args.max_cups, args.max_races, args.sleep_sec, not args.no_cache, args.workers, args.progress_every)
+    build_history(
+        args.months_back,
+        args.max_cups,
+        args.max_races,
+        args.sleep_sec,
+        not args.no_cache,
+        args.workers,
+        args.progress_every,
+        args.sample_mod,
+        args.sample_offset,
+    )
 
 
 if __name__ == "__main__":
