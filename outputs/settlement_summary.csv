@@ -1,3 +1,4 @@
 target,bets,hits,stake_yen,return_yen,profit_yen,roi
-AI購入分 expected_profit_yen > 0,1,0,500,0,-500,-1.0
-参考: latest_bets全候補,1,0,500,0,-500,-1.0
+AI購入分 確定済み,16,0,5500,0,-5500,-1.0
+AI購入分 未確定,8,0,2900,0,0,
+参考: latest_bets 確定済み,16,0,5500,0,-5500,-1.0

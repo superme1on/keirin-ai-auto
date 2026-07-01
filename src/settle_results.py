@@ -155,53 +155,44 @@ def build_report(selected, summary):
         "",
         f"作成日時: {datetime.now(ZoneInfo('Asia/Tokyo')).isoformat(timespec='seconds')}",
         "",
-        "## 買う条件",
-        "",
-        "- 3連単候補のうち `expected_profit_yen > 0` のものだけを購入",
-        "- 1点あたり100円",
-        "- 理由: AIの3連単近似確率とWINTICKET実オッズを掛けて、期待利益がプラスだったため",
-        "",
         "## 損益まとめ",
         "",
     ]
     for row in summary.to_dict("records"):
-        roi = "" if pd.isna(row["roi"]) else f"{row['roi']:.2%}"
+        roi = "-" if pd.isna(row["roi"]) else f"{row['roi']:.2%}"
         lines.append(
-            f"- {row['target']}: {row['bets']}点購入 / 的中 {row['hits']}点 / "
-            f"投資 {row['stake_yen']:,}円 / 払戻 {row['return_yen']:,}円 / "
+            f"- {row['target']}: {row['bets']}点 / 的中 {row['hits']}点 / "
+            f"購入 {row['stake_yen']:,}円 / 払戻 {row['return_yen']:,}円 / "
             f"損益 {row['profit_yen']:,}円 / 回収率 {roi}"
         )
 
     lines += [
         "",
-        "## 購入候補 上位20点",
+        "## 買い目",
         "",
-        "| 日付 | 場 | R | 買い目 | 確率 | オッズ | 期待利益 | 結果 | 損益 |",
-        "|---|---:|---:|---:|---:|---:|---:|---|---:|",
+        "| 日付 | 場 | R | 券種 | 買い目 | 確率 | オッズ | 期待利益 | 結果 | 損益 |",
+        "|---|---:|---:|---|---:|---:|---:|---:|---|---:|",
     ]
-    top = selected.sort_values(["date", "venue", "race_no", "candidate_rank"]).head(20)
+    top = selected.sort_values(["date", "venue", "race_no", "candidate_rank"]).head(50)
     for _, row in top.iterrows():
-        result = "的中" if row["is_hit"] else f"外れ({row.get('actual_for_bet_type', row.get('actual_trifecta', ''))})"
+        if not bool(row.get("is_decided", False)):
+            result = "未確定"
+            profit = 0
+        else:
+            result = "的中" if row["is_hit"] else f"外れ({row.get('actual_for_bet_type', row.get('actual_trifecta', ''))})"
+            profit = int(row["actual_profit_yen"])
         prob = row.get("prob", row.get("trifecta_prob_approx", np.nan))
         odds = row.get("odds_used", row.get("trifecta_odds", np.nan))
+        bet_label = row.get("bet_label", row.get("bet_type", ""))
         lines.append(
-            f"| {row['date']} | {row['venue']} | {row['race_no']} | {row['buy']} | "
-            f"{prob:.3f} | {odds:.1f} | "
-            f"{int(row['expected_profit_yen']):,}円 | {result} | {int(row['actual_profit_yen']):,}円 |"
+            f"| {row['date']} | {row['venue']} | {row['race_no']} | {bet_label} | {row['buy']} | "
+            f"{prob:.3f} | {odds:.1f} | {int(row['expected_profit_yen']):,}円 | {result} | {profit:,}円 |"
         )
-
-    lines += [
-        "",
-        "詳しい全件は `outputs/purchase_plan.csv` と `outputs/settled_bets.csv` を見てください。",
-    ]
+    lines += ["", "詳細は `outputs/purchase_plan.csv` と `outputs/settled_bets.csv` を見てください。"]
     return "\n".join(lines) + "\n"
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--min-expected-profit", type=float, default=0.0)
-    args = parser.parse_args()
-
+def run_settlement(args):
     ensure_dirs()
     results = fetch_results()
     bets = pd.read_csv(LATEST_BETS_CSV, dtype={"race_id": str})
@@ -214,26 +205,37 @@ def main():
         lambda row: row.get(f"actual_{row.get('bet_type', 'trifecta')}", row.get("actual_trifecta", "")),
         axis=1,
     )
+    settled["is_decided"] = settled["actual_for_bet_type"].fillna("").astype(str).str.len().gt(0)
     settled["is_hit"] = settled.apply(
-        lambda row: str(row["buy"]) in str(row.get("actual_for_bet_type", "")).split("|"),
+        lambda row: bool(row["is_decided"]) and str(row["buy"]) in str(row.get("actual_for_bet_type", "")).split("|"),
         axis=1,
     )
     return_col = "return_if_hit_yen" if "return_if_hit_yen" in settled.columns else "trifecta_return_yen"
-    settled["actual_return_yen"] = np.where(
-        settled["is_hit"],
-        pd.to_numeric(settled.get(return_col, 0), errors="coerce").fillna(0),
-        0,
-    )
-    settled["actual_profit_yen"] = settled["actual_return_yen"] - pd.to_numeric(settled["stake_yen"], errors="coerce").fillna(0)
+    payout_if_hit = pd.to_numeric(settled.get(return_col, 0), errors="coerce").fillna(0)
+    stake = pd.to_numeric(settled["stake_yen"], errors="coerce").fillna(0)
+    settled["actual_return_yen"] = np.where(settled["is_decided"], np.where(settled["is_hit"], payout_if_hit, 0), np.nan)
+    settled["actual_profit_yen"] = np.where(settled["is_decided"], settled["actual_return_yen"] - stake, np.nan)
     settled.to_csv(SETTLED_BETS_CSV, index=False)
 
     selected = settled[settled["is_selected"]].copy()
     selected.to_csv(PURCHASE_PLAN_CSV, index=False)
+    selected_decided = selected[selected["is_decided"]].copy()
+    selected_pending = selected[~selected["is_decided"]].copy()
+    settled_decided = settled[settled["is_decided"]].copy()
 
     summary = pd.DataFrame(
         [
-            summarize("AI購入分 expected_profit_yen > 0", selected),
-            summarize("参考: latest_bets全候補", settled),
+            summarize("AI購入分 確定済み", selected_decided),
+            {
+                "target": "AI購入分 未確定",
+                "bets": int(len(selected_pending)),
+                "hits": 0,
+                "stake_yen": int(pd.to_numeric(selected_pending.get("stake_yen", pd.Series(dtype=float)), errors="coerce").fillna(0).sum()),
+                "return_yen": 0,
+                "profit_yen": 0,
+                "roi": np.nan,
+            },
+            summarize("参考: latest_bets 確定済み", settled_decided),
         ]
     )
     summary.to_csv(SETTLEMENT_SUMMARY_CSV, index=False)
@@ -242,6 +244,13 @@ def main():
     print(f"saved: {PURCHASE_PLAN_CSV}")
     print(f"saved: {SETTLED_BETS_CSV}")
     print(f"saved: {REPORT_MD}")
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--min-expected-profit", type=float, default=0.0)
+    args = parser.parse_args()
+    return run_settlement(args)
 
 
 if __name__ == "__main__":
