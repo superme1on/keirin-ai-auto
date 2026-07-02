@@ -20,10 +20,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: "pip"
@@ -46,22 +46,26 @@ jobs:
           python src/update_growth_log.py --kind settle
 
       - name: Learn from latest settled data
-        if: ${{ secrets.KEIRIN_HISTORY_CSV_URL == '' }}
         env:
+          KEIRIN_HISTORY_CSV_URL: ${{ secrets.KEIRIN_HISTORY_CSV_URL }}
           HISTORY_MONTHS_BACK: 24
           HISTORY_MAX_RACES: 10000
           HISTORY_WORKERS: 8
         run: |
-          python src/build_history.py --months-back "$HISTORY_MONTHS_BACK" --max-races "$HISTORY_MAX_RACES" --workers "$HISTORY_WORKERS" --sleep-sec 0 --progress-every 250
-          python src/train.py
-          python src/update_growth_log.py --kind train
+          if [ -z "$KEIRIN_HISTORY_CSV_URL" ]; then
+            python src/build_history.py --months-back "$HISTORY_MONTHS_BACK" --max-races "$HISTORY_MAX_RACES" --workers "$HISTORY_WORKERS" --sleep-sec 0 --progress-every 250
+            python src/train.py
+            python src/update_growth_log.py --kind train
+          else
+            echo "KEIRIN_HISTORY_CSV_URL is configured; skip WINTICKET history build"
+          fi
 
       - name: Update trial report
         run: |
           python src/report_growth.py --days 31 --start-date 2026-07-01
 
       - name: Upload settlement artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: keirin-settlement
           path: |

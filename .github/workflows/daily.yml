@@ -20,10 +20,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: "pip"
@@ -41,17 +41,25 @@ jobs:
           python src/ingest.py
 
       - name: Fetch today entries if no external today data is configured
-        if: ${{ secrets.KEIRIN_TODAY_CSV_URL == '' }}
+        env:
+          KEIRIN_TODAY_CSV_URL: ${{ secrets.KEIRIN_TODAY_CSV_URL }}
         run: |
-          python src/fetch_today_entries.py
+          if [ -z "$KEIRIN_TODAY_CSV_URL" ]; then
+            python src/fetch_today_entries.py
+          else
+            echo "KEIRIN_TODAY_CSV_URL is configured; skip WINTICKET fetch"
+          fi
 
       - name: Build fallback model only if missing
-        if: ${{ secrets.KEIRIN_HISTORY_CSV_URL == '' }}
+        env:
+          KEIRIN_HISTORY_CSV_URL: ${{ secrets.KEIRIN_HISTORY_CSV_URL }}
         run: |
-          if [ ! -f models/win_model.joblib ]; then
+          if [ -z "$KEIRIN_HISTORY_CSV_URL" ] && [ ! -f models/win_model.joblib ]; then
             python src/build_history.py --months-back 1 --max-races 300 --workers 4
             python src/train.py
             python src/update_growth_log.py --kind train
+          else
+            echo "model exists or external history is configured; skip fallback build"
           fi
 
       - name: Predict
@@ -59,7 +67,7 @@ jobs:
           python src/predict.py
 
       - name: Upload output artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: keirin-predictions
           path: outputs/
