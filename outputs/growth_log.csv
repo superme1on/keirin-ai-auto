@@ -14,3 +14,4 @@ logged_at_jst,kind,target_date,history_rows,history_races,auc_binary,brier_score
 2026-07-01T20:38:25+09:00,settle,2026-07-01,,,,,,,,,16.0,0.0,5500.0,0.0,-5500.0,-1.0,AI purchase settlement
 2026-07-02T19:29:04+09:00,settle,2026-07-01,,,,,,,,,24.0,0.0,8400.0,0.0,-8400.0,-1.0,AI purchase settlement
 2026-07-02T19:37:22+09:00,settle,2026-07-02,,,,,,,,,4.0,0.0,1400.0,0.0,-1400.0,-1.0,manual catch-up prediction after daily action failure
+2026-07-03T19:11:40+09:00,settle,2026-07-03,,,,,,,,,3.0,0.0,1300.0,0.0,-1300.0,-1.0,AI purchase settlement
