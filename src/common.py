@@ -30,6 +30,15 @@ FEATURE_COLS = [
     "score_rank",
     "score_gap_to_best",
     "score_vs_field",
+    "player_prior_races",
+    "player_prior_win_rate",
+    "player_prior_place2_rate",
+    "player_prior_place3_rate",
+    "player_prior_avg_finish",
+    "player_prior_strength",
+    "player_prior_strength_rank",
+    "player_prior_strength_gap_to_best",
+    "player_prior_strength_vs_field",
     "win_rate",
     "win_rate_rank",
     "win_rate_gap_to_best",
@@ -93,6 +102,78 @@ def add_categorical_codes(df: pd.DataFrame) -> pd.DataFrame:
     df["race_type_code"] = df.get("race_type", pd.Series(index=df.index, dtype=object)).map(lambda x: stable_bucket(x, 100))
     df["player_id_code"] = df.get("player_id", pd.Series(index=df.index, dtype=object)).map(lambda x: stable_bucket(x, 2000))
     return df
+
+
+def add_player_prior_features(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    required = {"player_id", "date", "finish_pos"}
+    if not required.issubset(df.columns):
+        return df
+
+    original_index = df.index
+    work = df.copy()
+    work["_original_order"] = np.arange(len(work))
+    work["_date_dt"] = pd.to_datetime(work["date"], errors="coerce")
+    sort_cols = [c for c in ["_date_dt", "race_id", "race_no", "car_no", "_original_order"] if c in work.columns]
+    work = work.sort_values(sort_cols, kind="mergesort")
+
+    player = work["player_id"].astype(str)
+    finish = pd.to_numeric(work["finish_pos"], errors="coerce")
+    observed = finish.notna().astype(float)
+    prior_races = observed.groupby(player, dropna=False).cumsum() - observed
+
+    win = finish.eq(1).astype(float) * observed
+    place2 = finish.le(2).astype(float) * observed
+    place3 = finish.le(3).astype(float) * observed
+    finish_sum = finish.fillna(0) * observed
+
+    prior_wins = win.groupby(player, dropna=False).cumsum() - win
+    prior_place2 = place2.groupby(player, dropna=False).cumsum() - place2
+    prior_place3 = place3.groupby(player, dropna=False).cumsum() - place3
+    prior_finish_sum = finish_sum.groupby(player, dropna=False).cumsum() - finish_sum
+
+    def safe_rate(values):
+        return np.where(prior_races > 0, values / prior_races, np.nan)
+
+    work["player_prior_races"] = prior_races
+    work["player_prior_win_rate"] = safe_rate(prior_wins)
+    work["player_prior_place2_rate"] = safe_rate(prior_place2)
+    work["player_prior_place3_rate"] = safe_rate(prior_place3)
+    work["player_prior_avg_finish"] = safe_rate(prior_finish_sum)
+
+    event_dates = work["_date_dt"].where(observed.astype(bool))
+    prev_dates = event_dates.groupby(player, dropna=False).transform(lambda s: s.ffill().shift(1))
+    work["days_since_last_race"] = (work["_date_dt"] - prev_dates).dt.days
+
+    has_prior = work["player_prior_races"] > 0
+    for source, target in [
+        ("player_prior_win_rate", "win_rate"),
+        ("player_prior_place2_rate", "place2_rate"),
+        ("player_prior_place3_rate", "place3_rate"),
+        ("player_prior_avg_finish", "recent_avg_finish"),
+    ]:
+        if target not in work.columns:
+            work[target] = np.nan
+        work[target] = work[source].where(has_prior, pd.to_numeric(work[target], errors="coerce"))
+
+    work["player_prior_strength"] = (
+        work["player_prior_win_rate"].fillna(0) * 10.0
+        + work["player_prior_place2_rate"].fillna(0) * 4.0
+        + work["player_prior_place3_rate"].fillna(0) * 2.0
+        - work["player_prior_avg_finish"].fillna(work["player_prior_avg_finish"].median()) * 0.45
+        + np.log1p(work["player_prior_races"].fillna(0)) * 0.1
+    )
+
+    if "race_id" in work.columns:
+        race_ids = work["race_id"]
+        values = pd.to_numeric(work["player_prior_strength"], errors="coerce")
+        group = values.groupby(race_ids, dropna=False)
+        work["player_prior_strength_rank"] = group.rank(ascending=False, method="average")
+        work["player_prior_strength_gap_to_best"] = group.transform("max") - values
+        work["player_prior_strength_vs_field"] = values - group.transform("mean")
+
+    work = work.sort_values("_original_order", kind="mergesort").set_index(original_index)
+    return work.drop(columns=["_original_order", "_date_dt"], errors="ignore")
 
 
 def add_strength_features(df: pd.DataFrame) -> pd.DataFrame:

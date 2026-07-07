@@ -1,5 +1,5 @@
 {
-  "created_at_jst": "2026-07-07T21:34:01+09:00",
+  "created_at_jst": "2026-07-07T21:51:53+09:00",
   "mode": "multi bet type walk-forward profit backtest",
   "features": [
     "race_no",
@@ -13,6 +13,15 @@
     "score_rank",
     "score_gap_to_best",
     "score_vs_field",
+    "player_prior_races",
+    "player_prior_win_rate",
+    "player_prior_place2_rate",
+    "player_prior_place3_rate",
+    "player_prior_avg_finish",
+    "player_prior_strength",
+    "player_prior_strength_rank",
+    "player_prior_strength_gap_to_best",
+    "player_prior_strength_vs_field",
     "win_rate",
     "win_rate_rank",
     "win_rate_gap_to_best",
@@ -33,8 +42,8 @@
     "race_type_code",
     "player_id_code"
   ],
-  "history_races": 9971,
-  "odds_races": 9982,
+  "history_races": 10500,
+  "odds_races": 10512,
   "params": {
     "min_train_dates": 30,
     "retrain_every_days": 7,
@@ -48,11 +57,11 @@
     "max_stake": 500,
     "wide_odds_policy": "ワイドは下限オッズを使用"
   },
-  "overall_bets": 48449,
-  "overall_hits": 1184,
-  "overall_hit_rate": 0.02443806889719086,
-  "overall_stake_yen": 7267600,
-  "overall_return_yen": 9297730,
-  "overall_profit_yen": 2030130,
-  "overall_roi": 0.27933980956574384
+  "overall_bets": 52159,
+  "overall_hits": 1150,
+  "overall_hit_rate": 0.022047968711056576,
+  "overall_stake_yen": 8091000,
+  "overall_return_yen": 8626390,
+  "overall_profit_yen": 535390,
+  "overall_roi": 0.06617105425781733
 }

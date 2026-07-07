@@ -8,7 +8,15 @@ import pandas as pd
 from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.metrics import roc_auc_score
 
-from common import HISTORY_CSV, OUTPUT_DIR, FEATURE_COLS, ensure_dirs, normalize_race_prob, prepare_features
+from common import (
+    HISTORY_CSV,
+    OUTPUT_DIR,
+    FEATURE_COLS,
+    add_player_prior_features,
+    ensure_dirs,
+    normalize_race_prob,
+    prepare_features,
+)
 
 
 def safe_auc(y, p):
@@ -40,6 +48,7 @@ def run_walk_forward(min_train_dates=10, retrain_every_days=1):
     df["date"] = pd.to_datetime(df["date"])
     df["target_win"] = (pd.to_numeric(df["finish_pos"], errors="coerce") == 1).astype(int)
     df = df.sort_values(["date", "race_id", "car_no"])
+    df = add_player_prior_features(df)
 
     dates = sorted(df["date"].dropna().unique())
     if len(dates) <= min_train_dates:

@@ -14,6 +14,7 @@ from common import (
     HISTORY_CSV,
     HISTORY_ODDS_CSV,
     OUTPUT_DIR,
+    add_player_prior_features,
     ensure_dirs,
     normalize_race_prob,
     prepare_features,
@@ -164,6 +165,7 @@ def run_multi_bet_backtest(
     odds = load_history_odds()
     hist["date"] = pd.to_datetime(hist["date"])
     hist["target_win"] = (pd.to_numeric(hist["finish_pos"], errors="coerce") == 1).astype(int)
+    hist = add_player_prior_features(hist)
     odds = odds[odds["bet_type"].isin(BET_LABELS)].copy()
     odds = odds[pd.to_numeric(odds["odds_used"], errors="coerce").gt(0)].copy()
     odds_cols = ["race_id", "bet_type", "buy", "odds_used", "is_actual", "actual_buy"]

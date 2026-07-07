@@ -15,6 +15,7 @@ from common import (
     HISTORY_TRIFECTA_ODDS_CSV,
     OUTPUT_DIR,
     FEATURE_COLS,
+    add_player_prior_features,
     ensure_dirs,
     normalize_race_prob,
     prepare_features,
@@ -85,6 +86,7 @@ def run_profit_backtest(
     odds = load_history_odds()
     hist["date"] = pd.to_datetime(hist["date"])
     hist["target_win"] = (pd.to_numeric(hist["finish_pos"], errors="coerce") == 1).astype(int)
+    hist = add_player_prior_features(hist)
     odds_race_count = int(odds["race_id"].nunique()) if len(odds) else 0
 
     dates = sorted(hist["date"].dropna().unique())

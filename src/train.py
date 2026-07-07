@@ -19,6 +19,7 @@ from common import (
     METRICS_PATH,
     FEATURE_COLS,
     OUTPUT_DIR,
+    add_player_prior_features,
     prepare_features,
     normalize_race_prob,
 )
@@ -135,6 +136,7 @@ def main():
     df["date"] = pd.to_datetime(df["date"])
     df["target_win"] = (pd.to_numeric(df["finish_pos"], errors="coerce") == 1).astype(int)
     df = df.sort_values(["date", "race_id", "car_no"])
+    df = add_player_prior_features(df)
 
     dates = sorted(df["date"].dropna().unique())
     if len(dates) < 10:

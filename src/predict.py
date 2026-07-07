@@ -12,11 +12,13 @@ import pandas as pd
 
 from common import (
     ensure_dirs,
+    HISTORY_CSV,
     RAW_DIR,
     TODAY_CSV,
     TODAY_ODDS_CSV,
     MODEL_PATH,
     OUTPUT_DIR,
+    add_player_prior_features,
     prepare_features,
     normalize_race_prob,
 )
@@ -129,6 +131,22 @@ def load_today_odds():
     return pd.DataFrame(columns=["race_id", "bet_type", "buy", "odds_used"])
 
 
+def add_today_prior_features(df):
+    if not HISTORY_CSV.exists():
+        return df
+    hist = pd.read_csv(HISTORY_CSV, dtype={"race_id": str, "player_id": str})
+    df = df.copy()
+    hist["_today_row_id"] = np.nan
+    df["_today_row_id"] = np.arange(len(df))
+    if "finish_pos" not in df.columns:
+        df["finish_pos"] = np.nan
+    combined = pd.concat([hist, df], ignore_index=True, sort=False)
+    combined = add_player_prior_features(combined)
+    today = combined[combined["_today_row_id"].notna()].copy()
+    today = today.sort_values("_today_row_id", kind="mergesort")
+    return today.drop(columns=["_today_row_id"], errors="ignore")
+
+
 def main():
     ensure_dirs()
     ensure_ready()
@@ -143,6 +161,7 @@ def main():
     df = pd.read_csv(TODAY_CSV, dtype={"race_id": str, "player_id": str})
     if "race_id" not in df.columns:
         raise ValueError("today_entries.csv must have race_id column")
+    df = add_today_prior_features(df)
 
     X, _ = prepare_features(df, fill_values)
 
