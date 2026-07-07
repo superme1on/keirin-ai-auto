@@ -23,11 +23,23 @@ FEATURE_COLS = [
     "car_no",
     "age",
     "score",
+    "rider_strength",
+    "rider_strength_rank",
+    "rider_strength_gap_to_best",
+    "rider_strength_vs_field",
+    "score_rank",
+    "score_gap_to_best",
+    "score_vs_field",
     "win_rate",
+    "win_rate_rank",
+    "win_rate_gap_to_best",
     "place2_rate",
+    "place2_rate_rank",
     "place3_rate",
+    "place3_rate_rank",
     "back_count",
     "recent_avg_finish",
+    "recent_avg_finish_rank",
     "days_since_last_race",
     "venue_win_rate",
     "odds_win",
@@ -83,8 +95,72 @@ def add_categorical_codes(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def add_strength_features(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    race_key = "race_id" if "race_id" in df.columns else None
+
+    def num(col, default=np.nan):
+        if col not in df.columns:
+            return pd.Series(default, index=df.index, dtype=float)
+        return pd.to_numeric(df[col], errors="coerce")
+
+    score = num("score")
+    win_rate = num("win_rate")
+    place2_rate = num("place2_rate")
+    place3_rate = num("place3_rate")
+    recent_avg_finish = num("recent_avg_finish")
+
+    # Compact, human-readable rider strength prior. The model still learns the
+    # final weights, but this gives it a direct "who is strong" signal.
+    df["rider_strength"] = (
+        score.fillna(score.median()) * 0.08
+        + win_rate.fillna(0) * 10.0
+        + place2_rate.fillna(0) * 4.0
+        + place3_rate.fillna(0) * 2.0
+        - recent_avg_finish.fillna(recent_avg_finish.median()) * 0.45
+    )
+
+    if race_key:
+        race_ids = df[race_key]
+        for col, ascending in [
+            ("rider_strength", False),
+            ("score", False),
+            ("win_rate", False),
+            ("place2_rate", False),
+            ("place3_rate", False),
+            ("recent_avg_finish", True),
+        ]:
+            values = pd.to_numeric(df[col], errors="coerce") if col in df.columns else pd.Series(np.nan, index=df.index)
+            ranks = values.groupby(race_ids, dropna=False).rank(ascending=ascending, method="average")
+            df[f"{col}_rank"] = ranks
+
+        strength_group = df["rider_strength"].groupby(race_ids, dropna=False)
+        score_group = score.groupby(race_ids, dropna=False)
+        win_rate_group = win_rate.groupby(race_ids, dropna=False)
+        df["rider_strength_gap_to_best"] = strength_group.transform("max") - df["rider_strength"]
+        df["rider_strength_vs_field"] = df["rider_strength"] - strength_group.transform("mean")
+        df["score_gap_to_best"] = score_group.transform("max") - score
+        df["score_vs_field"] = score - score_group.transform("mean")
+        df["win_rate_gap_to_best"] = win_rate_group.transform("max") - win_rate
+    else:
+        df["rider_strength_rank"] = np.nan
+        df["rider_strength_gap_to_best"] = np.nan
+        df["rider_strength_vs_field"] = np.nan
+        df["score_rank"] = np.nan
+        df["score_gap_to_best"] = np.nan
+        df["score_vs_field"] = np.nan
+        df["win_rate_rank"] = np.nan
+        df["win_rate_gap_to_best"] = np.nan
+        df["place2_rate_rank"] = np.nan
+        df["place3_rate_rank"] = np.nan
+        df["recent_avg_finish_rank"] = np.nan
+
+    return df
+
+
 def prepare_features(df: pd.DataFrame, fill_values=None):
     df = add_categorical_codes(df)
+    df = add_strength_features(df)
 
     for col in FEATURE_COLS:
         if col not in df.columns:

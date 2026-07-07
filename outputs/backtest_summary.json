@@ -1,14 +1,14 @@
 [
   {
     "strategy": "top_p_win_each_race",
-    "bets": 1501,
-    "hits": 632,
-    "hit_rate": 0.42105263157894735,
-    "stake_yen": 150100,
+    "bets": 1514,
+    "hits": 673,
+    "hit_rate": 0.44451783355350066,
+    "stake_yen": 151400,
     "win_return_yen": 0,
-    "loss_amount_yen": 86900,
-    "profit_yen": -86900,
-    "roi": -0.5789473684210527
+    "loss_amount_yen": 84100,
+    "profit_yen": -84100,
+    "roi": -0.5554821664464994
   },
   {
     "strategy": "positive_expected_value_all",

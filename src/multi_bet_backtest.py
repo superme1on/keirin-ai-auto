@@ -166,6 +166,11 @@ def run_multi_bet_backtest(
     hist["target_win"] = (pd.to_numeric(hist["finish_pos"], errors="coerce") == 1).astype(int)
     odds = odds[odds["bet_type"].isin(BET_LABELS)].copy()
     odds = odds[pd.to_numeric(odds["odds_used"], errors="coerce").gt(0)].copy()
+    odds_cols = ["race_id", "bet_type", "buy", "odds_used", "is_actual", "actual_buy"]
+    odds_by_race = {
+        str(race_id): race_odds[odds_cols].copy()
+        for race_id, race_odds in odds.groupby("race_id", sort=False)
+    }
 
     dates = sorted(hist["date"].dropna().unique())
     all_bets = []
@@ -190,9 +195,9 @@ def run_multi_bet_backtest(
         day_selected = []
         for race_id, race_df in pred.groupby("race_id"):
             cand = make_candidates(race_df, top_k=top_k)
-            race_odds = odds[odds["race_id"].eq(str(race_id))][
-                ["race_id", "bet_type", "buy", "odds_used", "is_actual", "actual_buy"]
-            ]
+            race_odds = odds_by_race.get(str(race_id))
+            if race_odds is None:
+                continue
             merged = cand.merge(race_odds, on=["bet_type", "buy"], how="inner")
             if len(merged) == 0:
                 continue
