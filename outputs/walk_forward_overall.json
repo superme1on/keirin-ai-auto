@@ -1,5 +1,5 @@
 {
-  "created_at_jst": "2026-07-07T21:51:11+09:00",
+  "created_at_jst": "2026-07-07T22:58:40+09:00",
   "features": [
     "race_no",
     "car_no",
@@ -41,11 +41,11 @@
     "race_type_code",
     "player_id_code"
   ],
-  "days": 678,
-  "test_races": 10066,
-  "top1_bets": 10066,
-  "top1_hits": 4420,
-  "top1_hit_rate": 0.43910192727995234,
-  "avg_auc_binary": 0.7999694869955164,
-  "avg_race_logloss": 1.4832595383766338
+  "days": 1773,
+  "test_races": 33519,
+  "top1_bets": 33519,
+  "top1_hits": 15046,
+  "top1_hit_rate": 0.44887973984904084,
+  "avg_auc_binary": 0.8095491359997389,
+  "avg_race_logloss": 1.4474571240078857
 }

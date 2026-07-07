@@ -1,6 +1,6 @@
 # 競輪AI 1か月トライアル記録
 
-作成日時: 2026-07-07T21:52:27+09:00
+作成日時: 2026-07-07T23:10:56+09:00
 対象期間: 2026-07-01 から直近31日
 
 ## 実購入ベース
@@ -18,9 +18,6 @@
 
 | 日時 | 種別 | 対象日 | 購入 | 的中 | 投資 | 払戻 | 損益 | 回収率 | メモ |
 |---|---|---|---:|---:|---:|---:|---:|---:|---|
-| 2026-07-07T18:23:07+09:00 | settle | 2026-07-06 | 3 | 0 | 900円 | 0円 | -900円 | -100.00% | AI purchase settlement |
-| 2026-07-07T18:26:11+09:00 | settle | 2026-07-07 | 8 | 0 | 2,300円 | 0円 | -2,300円 | -100.00% | AI purchase settlement |
-| 2026-07-07T21:34:17+09:00 | train | 2026-07-07 |  |  | - | - | - | - | WINTICKET history training metrics |
 | 2026-07-07T21:34:17+09:00 | multi_bet_backtest | 2026-07-07 | 48449 | 1184 | 7,267,600円 | 9,297,730円 | 2,030,130円 | 27.93% | best broad bet type: 3連単, profit_yen=790530 |
 | 2026-07-07T21:46:12+09:00 | train | 2026-07-07 |  |  | - | - | - | - | WINTICKET history training metrics |
 | 2026-07-07T21:46:12+09:00 | walk_forward | 2026-07-07 |  |  | - | - | - | - | hide-result then predict then reveal walk-forward test |
@@ -28,10 +25,13 @@
 | 2026-07-07T21:52:17+09:00 | train | 2026-07-07 |  |  | - | - | - | - | WINTICKET history training metrics |
 | 2026-07-07T21:52:17+09:00 | walk_forward | 2026-07-07 |  |  | - | - | - | - | hide-result then predict then reveal walk-forward test |
 | 2026-07-07T21:52:18+09:00 | multi_bet_backtest | 2026-07-07 | 52159 | 1150 | 8,091,000円 | 8,626,390円 | 535,390円 | 6.62% | best broad bet type: 3連複, profit_yen=460670 |
+| 2026-07-07T23:10:55+09:00 | train | 2026-07-07 |  |  | - | - | - | - | WINTICKET history training metrics |
+| 2026-07-07T23:10:55+09:00 | walk_forward | 2026-07-07 |  |  | - | - | - | - | hide-result then predict then reveal walk-forward test |
+| 2026-07-07T23:10:56+09:00 | multi_bet_backtest | 2026-07-07 | 165849 | 4061 | 24,817,500円 | 30,628,090円 | 5,810,590円 | 23.41% | best broad bet type: 3連複, profit_yen=2447650 |
 
 ## 学習状況
 
-- 期間内の再学習回数: 6回
-- 期間内の券種別バックテスト回数: 6回
-- 最新AUC: 0.7976
-- 最新本命的中率: 43.31%
+- 期間内の再学習回数: 7回
+- 期間内の券種別バックテスト回数: 7回
+- 最新AUC: 0.8023
+- 最新本命的中率: 43.34%
