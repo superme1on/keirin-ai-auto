@@ -33,3 +33,4 @@ logged_at_jst,kind,target_date,history_rows,history_races,auc_binary,brier_score
 2026-07-07T23:10:55+09:00,walk_forward,2026-07-07,,33519.0,0.8095491359997389,,1.4474571240078855,33519.0,15046.0,0.4488797398490408,,,,,,,hide-result then predict then reveal walk-forward test
 2026-07-07T23:10:56+09:00,multi_bet_backtest,2026-07-07,,33882.0,,,,,,,165849.0,4061.0,24817500.0,30628090.0,5810590.0,0.2341327692152714,"best broad bet type: 3連複, profit_yen=2447650"
 2026-07-08T18:24:11+09:00,settle,2026-07-08,,,,,,,,,4.0,0.0,1600.0,0.0,-1600.0,-1.0,AI purchase settlement
+2026-07-09T19:30:54+09:00,settle,2026-07-09,,,,,,,,,2.0,0.0,600.0,0.0,-600.0,-1.0,AI purchase settlement
