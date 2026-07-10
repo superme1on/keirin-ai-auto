@@ -109,3 +109,19 @@ BET_BASE_STAKE_YEN=100 BET_MAX_STAKE_YEN=500 python src/predict.py
 ## 注意
 
 これは予想補助ツールです。的中や利益を保証するものではありません。
+
+## 厳密検証と購入ゲート
+
+履歴作成では、落車・失格・途中棄権を含む全出走者を保持します。学習前に次の監査を実行し、出走者が1人でも欠けたレースがあれば失敗します。
+
+```bash
+python src/audit_history.py --fail-on-leakage
+```
+
+時間順の開発・校正・ホールドアウト検証は次で実行します。
+
+```bash
+python src/honest_backtest.py --rebuild-entry
+```
+
+`src/external_holdout.py` は、開発履歴とURLが重複しないレースを評価し、使用モデルのSHA-256を記録します。`outputs/external_holdout_overall.json` の `target_passed` が `true` になるまで、`outputs/latest_bets.csv` は0点です。未承認候補は `outputs/latest_shadow_bets.csv` にだけ保存されます。

@@ -7,4 +7,6 @@ data/raw/*.csv
 data/raw/*.json
 data/raw/race_cache/
 data/processed/*.csv
+data/processed/*.json
+data/external_holdout/
 .DS_Store

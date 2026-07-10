@@ -17,6 +17,15 @@ SETTLED_BETS_CSV = OUTPUT_DIR / "settled_bets.csv"
 PURCHASE_PLAN_CSV = OUTPUT_DIR / "purchase_plan.csv"
 SETTLEMENT_SUMMARY_CSV = OUTPUT_DIR / "settlement_summary.csv"
 REPORT_MD = OUTPUT_DIR / "japanese_report.md"
+PAYOUT_SPECS = {
+    "trifecta": ("trifecta", True),
+    "trio": ("trio", False),
+    "exacta": ("exacta", True),
+    "quinella": ("quinella", False),
+    "quinella_place": ("quinellaPlace", False),
+    "bracket_exacta": ("bracketExacta", True),
+    "bracket_quinella": ("bracketQuinella", False),
+}
 
 
 def key_to_buy(values, ordered=True):
@@ -58,6 +67,7 @@ def parse_result_page(url):
     html = http_get(url)
     state = extract_preloaded_state(html)
     race_data = find_query_data(state, "FETCH_KEIRIN_RACE")
+    odds_data = find_query_data(state, "FETCH_KEIRIN_RACE_ODDS")
     if not race_data:
         raise ValueError(f"race data not found: {url}")
 
@@ -82,13 +92,19 @@ def parse_result_page(url):
     winning_buy = "-".join(str(x) for x in top3) if len(top3) == 3 else ""
     actual = actual_buy_sets(top3, bracket_by_car)
 
-    winning_odds = np.nan
-    for item in race_data.get("trifecta", []) or []:
-        key = item.get("key", [])
-        buy = "-".join(str(int(x)) for x in key) if len(key) == 3 else ""
-        if buy == winning_buy:
-            winning_odds = pd.to_numeric(item.get("odds"), errors="coerce")
-            break
+    payouts = {}
+    for bet_type, (source, ordered_ticket) in PAYOUT_SPECS.items():
+        ticket_payouts = {}
+        for item in odds_data.get(source, []) or []:
+            payoff = pd.to_numeric(item.get("payoffUnitPrice"), errors="coerce")
+            key = item.get("key", [])
+            if pd.isna(payoff) or payoff <= 0 or len(key) not in [2, 3]:
+                continue
+            ticket_payouts[key_to_buy(key, ordered=ordered_ticket)] = int(payoff)
+        payouts[bet_type] = ticket_payouts
+
+    winning_payout = payouts.get("trifecta", {}).get(winning_buy)
+    winning_odds = float(winning_payout / 100) if winning_payout else np.nan
 
     result = {
         "race_id": race_id,
@@ -100,7 +116,27 @@ def parse_result_page(url):
     }
     for bet_type, buy in actual.items():
         result[f"actual_{bet_type}"] = buy
+    for bet_type, ticket_payouts in payouts.items():
+        result[f"payouts_{bet_type}_json"] = json.dumps(ticket_payouts, ensure_ascii=False, sort_keys=True)
     return result
+
+
+def settled_return_yen(row, fallback_return):
+    if not bool(row.get("is_decided", False)):
+        return np.nan
+    if not bool(row.get("is_hit", False)):
+        return 0.0
+    bet_type = str(row.get("bet_type", "trifecta"))
+    payload = row.get(f"payouts_{bet_type}_json", "")
+    try:
+        payouts = json.loads(payload) if isinstance(payload, str) and payload else {}
+    except json.JSONDecodeError:
+        payouts = {}
+    payout_per_100 = pd.to_numeric(payouts.get(str(row.get("buy", ""))), errors="coerce")
+    stake = pd.to_numeric(row.get("stake_yen"), errors="coerce")
+    if pd.notna(payout_per_100) and payout_per_100 > 0 and pd.notna(stake):
+        return float(round(float(stake) * float(payout_per_100) / 100.0))
+    return float(fallback_return)
 
 
 def fetch_results(sleep_sec=0.2):
@@ -213,7 +249,10 @@ def run_settlement(args):
     return_col = "return_if_hit_yen" if "return_if_hit_yen" in settled.columns else "trifecta_return_yen"
     payout_if_hit = pd.to_numeric(settled.get(return_col, 0), errors="coerce").fillna(0)
     stake = pd.to_numeric(settled["stake_yen"], errors="coerce").fillna(0)
-    settled["actual_return_yen"] = np.where(settled["is_decided"], np.where(settled["is_hit"], payout_if_hit, 0), np.nan)
+    settled["actual_return_yen"] = [
+        settled_return_yen(row, fallback)
+        for (_, row), fallback in zip(settled.iterrows(), payout_if_hit.to_numpy())
+    ]
     settled["actual_profit_yen"] = np.where(settled["is_decided"], settled["actual_return_yen"] - stake, np.nan)
     settled.to_csv(SETTLED_BETS_CSV, index=False)
 

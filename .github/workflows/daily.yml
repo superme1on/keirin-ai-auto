@@ -56,6 +56,7 @@ jobs:
         run: |
           if [ -z "$KEIRIN_HISTORY_CSV_URL" ] && [ ! -f models/win_model.joblib ]; then
             python src/build_history.py --months-back 1 --max-races 300 --workers 4
+            python src/audit_history.py --fail-on-leakage
             python src/train.py
             python src/update_growth_log.py --kind train
           else

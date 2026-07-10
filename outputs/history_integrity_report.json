@@ -1,0 +1,11 @@
+{
+  "created_at_jst": "2026-07-10T21:46:02+09:00",
+  "history_rows": 239274,
+  "history_races": 33894,
+  "comparable_races": 33894,
+  "complete_races": 33894,
+  "broken_races": 0,
+  "broken_rate": 0.0,
+  "missing_entry_rows": 0,
+  "integrity_csv": "C:\\Users\\ginpe\\Documents\\Codex\\keirin-ai-auto\\data\\processed\\race_integrity.csv"
+}

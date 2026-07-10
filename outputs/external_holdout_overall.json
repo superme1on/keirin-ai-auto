@@ -1,0 +1,17 @@
+{
+  "opened_at_jst": "2026-07-10T21:39:41+09:00",
+  "model_sha256": "12e400d8ca7e9f73bf60e5d5aa2000a34321b950161a709f0865456123e5ca78",
+  "model_created_at_jst": "2026-07-10T20:59:31+09:00",
+  "external_races": 27884,
+  "bets": 547,
+  "hits": 34,
+  "stake_yen": 54700,
+  "return_yen": 51810,
+  "profit_yen": -2890,
+  "roi": -0.05283363802559415,
+  "positive_months": 5,
+  "roi_ci_low": -0.41905393053016454,
+  "roi_ci_high": 0.35927787934186445,
+  "target_roi": 0.5,
+  "target_passed": false
+}

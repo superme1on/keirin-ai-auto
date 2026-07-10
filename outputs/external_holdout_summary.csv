@@ -1,0 +1,2 @@
+bet_type,bet_label,bets,hits,stake_yen,return_yen,profit_yen,roi,positive_months,min_ev,min_prob,max_odds,daily_cap,validation_selection_score
+trifecta,3連単,547,34,54700,51810,-2890,-0.05283363802559415,5,-0.15,0.03,50,1,0.3432584475380051

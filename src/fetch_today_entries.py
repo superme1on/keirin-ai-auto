@@ -12,6 +12,7 @@ import pandas as pd
 import requests
 
 from common import ensure_dirs, RAW_DIR, TODAY_CSV, TODAY_ODDS_CSV
+from race_features import build_entry_rows
 
 BASE_URL = "https://www.winticket.jp"
 RACECARD_URL = f"{BASE_URL}/keirin/racecard"
@@ -193,47 +194,15 @@ def parse_race_page(url):
     race_no = int(race["number"])
     race_id = str(race["id"])
 
-    players = {str(p.get("id")): p for p in race_data.get("players", [])}
-    records = {str(r.get("playerId")): r for r in race_data.get("records", [])}
-
-    entry_rows = []
-    for entry in race_data.get("entries", []):
-        if entry.get("absent"):
-            continue
-        player_id = str(entry.get("playerId", ""))
-        player = players.get(player_id, {})
-        record = records.get(player_id, {})
-
-        first_rate = pd.to_numeric(record.get("firstRate"), errors="coerce") / 100
-        second_rate = pd.to_numeric(record.get("secondRate"), errors="coerce") / 100
-        third_rate = pd.to_numeric(record.get("thirdRate"), errors="coerce") / 100
-
-        entry_rows.append(
-            {
-                "race_id": race_id,
-                "date": race_date,
-                "venue": venue,
-                "race_no": race_no,
-                "player_id": player_id,
-                "car_no": int(entry.get("number")),
-                "age": player.get("age", np.nan),
-                "score": record.get("racePoint", np.nan),
-                "win_rate": first_rate,
-                "place2_rate": second_rate,
-                "place3_rate": third_rate,
-                "back_count": record.get("back", np.nan),
-                "style": record.get("style", ""),
-                "recent_avg_finish": recent_avg_finish(record),
-                "days_since_last_race": days_since_last_race(record, race_date),
-                "venue_win_rate": first_rate,
-                "odds_win": np.nan,
-                "source_url": url,
-                "player_name": player.get("name", ""),
-                "race_class": race.get("class", ""),
-                "race_type": race.get("raceType", ""),
-                "distance": race.get("distance", np.nan),
-            }
-        )
+    entry_rows = build_entry_rows(
+        race_data,
+        race_date=race_date,
+        venue=venue,
+        race_no=race_no,
+        race_id=race_id,
+        source_url=url,
+        include_results=False,
+    )
 
     odds_data = find_query_data(state, "FETCH_KEIRIN_RACE_ODDS")
     odds_rows = build_odds_rows(odds_data, race_date, venue, race_no, race_id, url)

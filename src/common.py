@@ -21,7 +21,12 @@ METRICS_PATH = MODEL_DIR / "metrics.json"
 FEATURE_COLS = [
     "race_no",
     "car_no",
+    "bracket_no",
     "age",
+    "term",
+    "region_id",
+    "player_class",
+    "player_group",
     "score",
     "rider_strength",
     "rider_strength_rank",
@@ -35,6 +40,7 @@ FEATURE_COLS = [
     "player_prior_place2_rate",
     "player_prior_place3_rate",
     "player_prior_avg_finish",
+    "player_prior_days_since_last_race",
     "player_prior_strength",
     "player_prior_strength_rank",
     "player_prior_strength_gap_to_best",
@@ -47,16 +53,65 @@ FEATURE_COLS = [
     "place3_rate",
     "place3_rate_rank",
     "back_count",
+    "standing_count",
+    "front_runner_count",
+    "stalker_count",
+    "deep_closer_count",
+    "marker_count",
+    "gear_ratio",
+    "prediction_mark",
     "recent_avg_finish",
     "recent_avg_finish_rank",
+    "recent_races_count",
+    "current_cup_avg_finish",
     "days_since_last_race",
     "venue_win_rate",
+    "track_win_rate",
+    "track_place2_rate",
+    "track_place3_rate",
+    "track_races",
+    "weather_win_rate",
+    "weather_place2_rate",
+    "weather_place3_rate",
+    "weather_races",
+    "race_type_win_rate",
+    "race_type_place2_rate",
+    "race_type_place3_rate",
+    "race_type_races",
+    "hour_win_rate",
+    "hour_place2_rate",
+    "hour_place3_rate",
+    "hour_races",
+    "line_role_win_rate",
+    "line_role_place2_rate",
+    "line_role_place3_rate",
+    "line_role_races",
+    "line_id",
+    "line_position",
+    "line_size",
+    "is_line_leader",
+    "number_of_lines",
+    "wind_speed",
+    "meeting_day",
+    "entries_number",
+    "is_grade_race",
+    "start_hour",
+    "day_of_week",
+    "month",
+    "current_term_class",
+    "current_term_group",
+    "previous_term_class",
+    "previous_term_group",
     "odds_win",
     "distance",
     "style_code",
     "venue_code",
     "race_class_code",
     "race_type_code",
+    "weather_code",
+    "line_type_code",
+    "prefecture_code",
+    "gender_code",
     "player_id_code",
 ]
 
@@ -100,7 +155,19 @@ def add_categorical_codes(df: pd.DataFrame) -> pd.DataFrame:
     df["venue_code"] = df.get("venue", pd.Series(index=df.index, dtype=object)).map(lambda x: stable_bucket(x, 200))
     df["race_class_code"] = df.get("race_class", pd.Series(index=df.index, dtype=object)).map(lambda x: stable_bucket(x, 50))
     df["race_type_code"] = df.get("race_type", pd.Series(index=df.index, dtype=object)).map(lambda x: stable_bucket(x, 100))
+    df["weather_code"] = df.get("weather", pd.Series(index=df.index, dtype=object)).map(lambda x: stable_bucket(x, 20))
+    df["line_type_code"] = df.get("line_type", pd.Series(index=df.index, dtype=object)).map(lambda x: stable_bucket(x, 20))
+    df["prefecture_code"] = df.get("prefecture", pd.Series(index=df.index, dtype=object)).map(lambda x: stable_bucket(x, 100))
+    df["gender_code"] = df.get("gender", pd.Series(index=df.index, dtype=object)).map(lambda x: stable_bucket(x, 10))
     df["player_id_code"] = df.get("player_id", pd.Series(index=df.index, dtype=object)).map(lambda x: stable_bucket(x, 2000))
+
+    dates = pd.to_datetime(df.get("date", pd.Series(index=df.index, dtype=object)), errors="coerce")
+    df["day_of_week"] = dates.dt.dayofweek
+    df["month"] = dates.dt.month
+    start_at = pd.to_numeric(df.get("start_at", pd.Series(index=df.index, dtype=float)), errors="coerce")
+    df["start_hour"] = ((start_at // 3600 + 9) % 24).where(start_at.notna())
+    if "entries_number" not in df.columns and "race_id" in df.columns:
+        df["entries_number"] = df.groupby("race_id")["race_id"].transform("count")
     return df
 
 
@@ -143,18 +210,7 @@ def add_player_prior_features(df: pd.DataFrame) -> pd.DataFrame:
 
     event_dates = work["_date_dt"].where(observed.astype(bool))
     prev_dates = event_dates.groupby(player, dropna=False).transform(lambda s: s.ffill().shift(1))
-    work["days_since_last_race"] = (work["_date_dt"] - prev_dates).dt.days
-
-    has_prior = work["player_prior_races"] > 0
-    for source, target in [
-        ("player_prior_win_rate", "win_rate"),
-        ("player_prior_place2_rate", "place2_rate"),
-        ("player_prior_place3_rate", "place3_rate"),
-        ("player_prior_avg_finish", "recent_avg_finish"),
-    ]:
-        if target not in work.columns:
-            work[target] = np.nan
-        work[target] = work[source].where(has_prior, pd.to_numeric(work[target], errors="coerce"))
+    work["player_prior_days_since_last_race"] = (work["_date_dt"] - prev_dates).dt.days
 
     work["player_prior_strength"] = (
         work["player_prior_win_rate"].fillna(0) * 10.0

@@ -1,0 +1,17 @@
+{
+  "created_at_jst": "2026-07-10T20:59:31+09:00",
+  "design": "2022-2024 train, 2025H1 calibration, 2025H2 strategy selection, 2026 untouched holdout",
+  "target_roi": 0.5,
+  "holdout_bets": 180,
+  "holdout_hits": 14,
+  "holdout_stake_yen": 18000,
+  "holdout_return_yen": 23770,
+  "holdout_profit_yen": 5770,
+  "holdout_roi": 0.32055555555555554,
+  "holdout_positive_months": 3,
+  "roi_ci_low": -0.4089166666666667,
+  "roi_ci_high": 1.1968055555555548,
+  "target_passed": false,
+  "odds_policy": "final odds proxy; 10% haircut when selecting; flat 100 yen settlement",
+  "result_leakage_races": 0
+}

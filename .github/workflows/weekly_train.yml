@@ -53,6 +53,14 @@ jobs:
             echo "KEIRIN_HISTORY_CSV_URL is configured; skip WINTICKET history build"
           fi
 
+      - name: Verify history integrity
+        run: |
+          if [ -s data/raw/history_odds.csv ]; then
+            python src/audit_history.py --fail-on-leakage
+          else
+            echo "history odds are external or unavailable; skip entry-count audit"
+          fi
+
       - name: Train
         run: |
           python src/train.py

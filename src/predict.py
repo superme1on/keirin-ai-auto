@@ -25,6 +25,7 @@ from common import (
 from multi_bet_backtest import BET_LABELS, make_candidates as make_multi_bet_candidates
 
 TRIFECTA_ODDS_CSV = RAW_DIR / "today_trifecta_odds.csv"
+PROFIT_GATE_PATH = OUTPUT_DIR / "external_holdout_overall.json"
 DEFAULT_BET_CONFIGS = {
     "exacta": {"min_prob": 0.05, "min_ev": 800, "max_odds": 200, "max_per_race": 2},
     "quinella": {"min_prob": 0.05, "min_ev": 1200, "max_odds": 300, "max_per_race": 2},
@@ -57,6 +58,23 @@ def get_int_env(name, default):
         return int(raw)
     except ValueError:
         return int(default)
+
+
+def load_profit_gate():
+    if not PROFIT_GATE_PATH.exists():
+        return {"target_passed": False, "reason": "external holdout has not been completed"}
+    try:
+        result = json.loads(PROFIT_GATE_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"target_passed": False, "reason": "external holdout result is unreadable"}
+    if not bool(result.get("target_passed", False)):
+        return {
+            "target_passed": False,
+            "reason": "external holdout ROI target was not met",
+            "roi": result.get("roi"),
+            "bets": result.get("bets"),
+        }
+    return {"target_passed": True, "reason": "external holdout gate passed", **result}
 
 
 def stake_from_edge(expected_profit_100yen, base_stake=100, max_stake=500):
@@ -152,6 +170,7 @@ def main():
     ensure_ready()
     base_stake_yen = get_int_env("BET_BASE_STAKE_YEN", get_stake_yen())
     max_stake_yen = get_int_env("BET_MAX_STAKE_YEN", 500)
+    profit_gate = load_profit_gate()
 
     bundle = joblib.load(MODEL_PATH)
     model = bundle["model"]
@@ -255,6 +274,17 @@ def main():
         candidates = pd.DataFrame(columns=["date", "venue", "race_no", "race_id", "bet_type", "bet_label", "candidate_rank", "buy"])
         bets = candidates.copy()
 
+    shadow_bets = bets.copy()
+    if len(shadow_bets):
+        shadow_bets["purchase_authorized"] = bool(profit_gate["target_passed"])
+        shadow_bets["authorization_reason"] = profit_gate["reason"]
+    shadow_path = OUTPUT_DIR / f"shadow_bets_{today_jst}.csv"
+    latest_shadow_path = OUTPUT_DIR / "latest_shadow_bets.csv"
+    shadow_bets.to_csv(shadow_path, index=False)
+    shadow_bets.to_csv(latest_shadow_path, index=False)
+    if not profit_gate["target_passed"]:
+        bets = bets.head(0).copy()
+
     bets_path = OUTPUT_DIR / f"bets_{today_jst}.csv"
     latest_bets_path = OUTPUT_DIR / "latest_bets.csv"
     latest_candidates_path = OUTPUT_DIR / "latest_bet_candidates.csv"
@@ -296,12 +326,15 @@ def main():
         "created": str(latest_path),
         "bets": str(latest_bets_path),
         "candidates": str(latest_candidates_path),
+        "shadow_bets": str(latest_shadow_path),
         "html": str(html_path),
         "n_rows": int(len(pred)),
         "n_races": int(pred["race_id"].nunique()),
         "base_stake_yen": base_stake_yen,
         "max_stake_yen": max_stake_yen,
         "selected_bets": int(len(bets)),
+        "shadow_selected_bets": int(len(shadow_bets)),
+        "profit_gate": profit_gate,
         "bet_filter": {
             "configs": DEFAULT_BET_CONFIGS,
         },

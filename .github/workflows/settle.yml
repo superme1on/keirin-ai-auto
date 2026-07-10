@@ -54,6 +54,7 @@ jobs:
         run: |
           if [ -z "$KEIRIN_HISTORY_CSV_URL" ]; then
             python src/build_history.py --months-back "$HISTORY_MONTHS_BACK" --max-races "$HISTORY_MAX_RACES" --workers "$HISTORY_WORKERS" --sleep-sec 0 --progress-every 250
+            python src/audit_history.py --fail-on-leakage
             python src/train.py
             python src/update_growth_log.py --kind train
           else

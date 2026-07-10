@@ -95,8 +95,9 @@ def write_backtest_outputs(test_df, test_prob, stake_yen):
     backtest["loss_amount_yen"] = np.where(backtest["is_hit"], 0, stake_yen)
     backtest["expected_profit_yen"] = (stake_yen * backtest["expected_value_win"]).round(0)
 
-    top1_bets = backtest[backtest["rank_in_race"] == 1].copy()
-    value_bets = backtest[backtest["expected_value_win"] > 0].copy()
+    valid_odds = pd.to_numeric(backtest["odds_win"], errors="coerce").gt(0)
+    top1_bets = backtest[(backtest["rank_in_race"] == 1) & valid_odds].copy()
+    value_bets = backtest[(backtest["expected_value_win"] > 0) & valid_odds].copy()
     summaries = [
         summarize_strategy("top_p_win_each_race", top1_bets),
         summarize_strategy("positive_expected_value_all", value_bets),
@@ -183,9 +184,12 @@ def main():
     pred_df = test_df[["race_id", "finish_pos"]].copy()
     pred_df["p_raw"] = test_prob
     pred_df = normalize_race_prob(pred_df)
+    pred_df["rank_in_race"] = pred_df.groupby("race_id")["p_win"].rank(ascending=False, method="first")
 
     winner_probs = pred_df[pred_df["finish_pos"] == 1]["p_win"].clip(1e-9, 1.0)
     race_logloss = float(-np.log(winner_probs).mean()) if len(winner_probs) else None
+    top1 = pred_df[pred_df["rank_in_race"].eq(1)]
+    top1_hit_rate = float(pd.to_numeric(top1["finish_pos"], errors="coerce").eq(1).mean()) if len(top1) else None
     backtest_summaries = write_backtest_outputs(test_df, test_prob, stake_yen)
 
     metrics = {
@@ -196,18 +200,30 @@ def main():
         "n_calib": int(len(calib_df)),
         "n_test": int(len(test_df)),
         "n_races": int(df["race_id"].nunique()),
+        "production_n_train": int(len(df)),
         "features": FEATURE_COLS,
         "brier_score_binary": float(brier_score_loss(y_test, test_prob)) if len(test_df) else None,
         "auc_binary": safe_auc(y_test, test_prob),
         "race_logloss": race_logloss,
+        "top1_hit_rate": top1_hit_rate,
         "stake_yen": stake_yen,
         "backtest": backtest_summaries,
     }
 
+    X_full, production_fill_values = prepare_features(df)
+    production_model = HistGradientBoostingClassifier(
+        max_iter=300,
+        learning_rate=0.045,
+        max_leaf_nodes=31,
+        l2_regularization=0.02,
+        random_state=42,
+    )
+    production_model.fit(X_full, df["target_win"].astype(int))
+
     bundle = {
-        "model": model,
-        "calibrator": calibrator,
-        "fill_values": fill_values,
+        "model": production_model,
+        "calibrator": None,
+        "fill_values": production_fill_values,
         "features": FEATURE_COLS,
         "metrics": metrics,
     }

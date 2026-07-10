@@ -13,14 +13,13 @@ import pandas as pd
 from common import HISTORY_CSV, HISTORY_ODDS_CSV, HISTORY_TRIFECTA_ODDS_CSV, RAW_DIR, ensure_dirs
 from fetch_today_entries import (
     BASE_URL,
-    days_since_last_race,
     extract_preloaded_state,
     find_query_data,
     get_venue_name,
     http_get,
     normalize_date,
-    recent_avg_finish,
 )
+from race_features import build_entry_rows
 
 
 def month_start(dt):
@@ -100,7 +99,7 @@ def collect_race_urls_for_cup(cup):
 
 
 RACE_CACHE_DIR = RAW_DIR / "race_cache"
-CACHE_VERSION = 2
+CACHE_VERSION = 3
 ODDS_COLUMNS = [
     "date",
     "venue",
@@ -169,54 +168,15 @@ def parse_history_race(url, use_cache=True):
     race_no = int(race["number"])
     race_id = str(race["id"])
 
-    players = {str(p.get("id")): p for p in race_data.get("players", [])}
-    records = {str(r.get("playerId")): r for r in race_data.get("records", [])}
-    positions = {}
-    for result in race_data.get("results", []) or []:
-        player_id = str(result.get("playerId", ""))
-        order = result.get("order")
-        if player_id and isinstance(order, int) and order > 0:
-            positions[player_id] = int(order)
-
-    rows = []
-    for entry in race_data.get("entries", []):
-        if entry.get("absent"):
-            continue
-        player_id = str(entry.get("playerId", ""))
-        finish_pos = positions.get(player_id)
-        if not finish_pos:
-            continue
-        player = players.get(player_id, {})
-        record = records.get(player_id, {})
-        first_rate = pd.to_numeric(record.get("firstRate"), errors="coerce") / 100
-        second_rate = pd.to_numeric(record.get("secondRate"), errors="coerce") / 100
-        third_rate = pd.to_numeric(record.get("thirdRate"), errors="coerce") / 100
-        history_row = {
-            "race_id": race_id,
-            "date": race_date,
-            "venue": venue,
-            "race_no": race_no,
-            "player_id": player_id,
-            "car_no": int(entry.get("number")),
-            "age": player.get("age", np.nan),
-            "score": record.get("racePoint", np.nan),
-            "win_rate": first_rate,
-            "place2_rate": second_rate,
-            "place3_rate": third_rate,
-            "back_count": record.get("back", np.nan),
-            "style": record.get("style", ""),
-            "recent_avg_finish": recent_avg_finish(record),
-            "days_since_last_race": days_since_last_race(record, race_date),
-            "venue_win_rate": first_rate,
-            "odds_win": np.nan,
-            "finish_pos": finish_pos,
-            "source_url": url,
-            "player_name": player.get("name", ""),
-            "race_class": race.get("class", ""),
-            "race_type": race.get("raceType", ""),
-            "distance": race.get("distance", np.nan),
-        }
-        rows.append(history_row)
+    rows = build_entry_rows(
+        race_data,
+        race_date=race_date,
+        venue=venue,
+        race_no=race_no,
+        race_id=race_id,
+        source_url=url,
+        include_results=True,
+    )
 
     entry_by_player = {str(e.get("playerId")): int(e.get("number")) for e in race_data.get("entries", []) if e.get("number")}
     bracket_by_car = {
