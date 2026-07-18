@@ -111,6 +111,8 @@ def parse_result_page(url):
         "actual_trifecta": winning_buy,
         "actual_trifecta_odds": winning_odds,
         "race_status": race.get("status"),
+        "start_at": race.get("startAt"),
+        "close_at": race.get("closeAt"),
         "decided_at": race.get("decidedAt"),
         "source_url": url,
     }

@@ -1,0 +1,6 @@
+bet_type,bet_label,bets_recorded,bets_total,bets_decided,bets_pending,bets_excluded_after_close,bets_excluded_unknown_time,hits,hit_rate,stake_yen,return_yen,profit_yen,return_rate,roi
+exacta,2車単,15,15,11,4,0,0,0,0.0,4200,0,-4200,0.0,-1.0
+quinella,2車複,6,6,6,0,0,0,2,0.3333333333333333,3000,6500,3500,2.1666666666666665,1.1666666666666667
+quinella_place,ワイド,17,16,13,3,1,0,1,0.07692307692307693,2800,620,-2180,0.22142857142857142,-0.7785714285714286
+trifecta,3連単,23,23,19,4,0,0,0,0.0,8200,0,-8200,0.0,-1.0
+trio,3連複,10,9,7,2,1,0,1,0.14285714285714285,2700,2750,50,1.0185185185185186,0.018518518518518517

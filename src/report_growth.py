@@ -1,4 +1,5 @@
 import argparse
+import json
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -9,6 +10,7 @@ from common import OUTPUT_DIR, ensure_dirs
 
 GROWTH_LOG_CSV = OUTPUT_DIR / "growth_log.csv"
 TRIAL_REPORT_MD = OUTPUT_DIR / "trial_report.md"
+SHADOW_OVERALL_JSON = OUTPUT_DIR / "shadow_overall.json"
 
 
 def fmt_yen(value):
@@ -60,6 +62,7 @@ def build_trial_report(days=31, start_date=None):
     bets = pd.to_numeric(settlements.get("settlement_bets", 0), errors="coerce").fillna(0).sum()
     hits = pd.to_numeric(settlements.get("settlement_hits", 0), errors="coerce").fillna(0).sum()
     roi = profit / stake if stake else np.nan
+    return_rate = returns / stake if stake else np.nan
     hit_rate = hits / bets if bets else np.nan
 
     lines = [
@@ -77,8 +80,30 @@ def build_trial_report(days=31, start_date=None):
         f"- 購入金額: {fmt_yen(stake)}",
         f"- 払戻金額: {fmt_yen(returns)}",
         f"- 損益: {fmt_yen(profit)}",
-        f"- 回収率: {fmt_pct(roi)}",
+        f"- 回収率: {fmt_pct(return_rate)}",
+        f"- ROI: {fmt_pct(roi)}",
         "",
+    ]
+
+    if SHADOW_OVERALL_JSON.exists():
+        shadow = json.loads(SHADOW_OVERALL_JSON.read_text(encoding="utf-8"))
+        lines += [
+            "## 影予想（購入せず検証）",
+            "",
+            f"- 保存候補: {int(shadow.get('bets_recorded', shadow.get('bets_total', 0))):,}点",
+            f"- 締切前の有効予想: {int(shadow.get('bets_total', 0)):,}点",
+            f"- 締切後除外: {int(shadow.get('bets_excluded_after_close', 0)):,}点",
+            f"- 確定点数: {int(shadow.get('bets_decided', 0)):,}点",
+            f"- 的中点数: {int(shadow.get('hits', 0)):,}点",
+            f"- 仮想購入金額: {fmt_yen(shadow.get('stake_yen', np.nan))}",
+            f"- 公式払戻金額: {fmt_yen(shadow.get('return_yen', np.nan))}",
+            f"- 損益: {fmt_yen(shadow.get('profit_yen', np.nan))}",
+            f"- 回収率: {fmt_pct(shadow.get('return_rate', np.nan))}",
+            f"- ROI: {fmt_pct(shadow.get('roi', np.nan))}",
+            "",
+        ]
+
+    lines += [
         "## 最新ログ",
         "",
     ]
@@ -91,7 +116,7 @@ def build_trial_report(days=31, start_date=None):
         display_df = display_df[keep].copy()
     latest = display_df.sort_values("logged_at_dt").tail(10).copy()
     lines += [
-        "| 日時 | 種別 | 対象日 | 購入 | 的中 | 投資 | 払戻 | 損益 | 回収率 | メモ |",
+        "| 日時 | 種別 | 対象日 | 購入 | 的中 | 投資 | 払戻 | 損益 | ROI | メモ |",
         "|---|---|---|---:|---:|---:|---:|---:|---:|---|",
     ]
     for _, row in latest.iterrows():

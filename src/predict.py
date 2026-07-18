@@ -2,6 +2,7 @@ import json
 import os
 import subprocess
 import sys
+import hashlib
 from datetime import datetime
 from itertools import permutations
 from zoneinfo import ZoneInfo
@@ -58,6 +59,14 @@ def get_int_env(name, default):
         return int(raw)
     except ValueError:
         return int(default)
+
+
+def file_sha256(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def load_profit_gate():
@@ -222,6 +231,9 @@ def main():
     today_odds = load_today_odds()
     for race_id, g in pred.groupby("race_id", sort=False):
         base = g.iloc[0]
+        close_at = pd.to_numeric(base.get("close_at", np.nan), errors="coerce")
+        if pd.isna(close_at) or close_at <= datetime.now(ZoneInfo("Asia/Tokyo")).timestamp() + 300:
+            continue
         candidates = make_multi_bet_candidates(g, top_k=5)
         race_odds = today_odds[today_odds["race_id"].eq(str(race_id))]
         if len(candidates) == 0 or len(race_odds) == 0:
@@ -238,6 +250,8 @@ def main():
                 "venue": base.get("venue", ""),
                 "race_no": base.get("race_no", ""),
                 "race_id": race_id,
+                "start_at": base.get("start_at", np.nan),
+                "close_at": close_at,
                 "bet_type": cand["bet_type"],
                 "bet_label": BET_LABELS.get(cand["bet_type"], cand["bet_type"]),
                 "candidate_rank": int(cand["candidate_rank"]),
@@ -278,6 +292,9 @@ def main():
     if len(shadow_bets):
         shadow_bets["purchase_authorized"] = bool(profit_gate["target_passed"])
         shadow_bets["authorization_reason"] = profit_gate["reason"]
+        shadow_bets["model_sha256"] = file_sha256(MODEL_PATH)
+        shadow_bets["prediction_created_at_jst"] = datetime.now(ZoneInfo("Asia/Tokyo")).isoformat(timespec="seconds")
+        shadow_bets["odds_snapshot"] = "daily morning snapshot"
     shadow_path = OUTPUT_DIR / f"shadow_bets_{today_jst}.csv"
     latest_shadow_path = OUTPUT_DIR / "latest_shadow_bets.csv"
     shadow_bets.to_csv(shadow_path, index=False)

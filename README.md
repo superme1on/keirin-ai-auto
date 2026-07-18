@@ -100,6 +100,8 @@ BET_BASE_STAKE_YEN=100 BET_MAX_STAKE_YEN=500 python src/predict.py
 
 `outputs/trial_report.md` は、直近31日の決済ログを実購入ベースで合算した1か月トライアル用レポートです。
 
+`outputs/shadow_report.md` は、購入停止中に記録した影予想を公式払戻で精算した日別・券種別の成長記録です。`outputs/shadow_daily_summary.csv` に日別損益、`outputs/shadow_settled_bets.csv` に全買い目の勝敗を追記します。
+
 `outputs/walk_forward_summary.csv` は、結果を見ずに日付順で予想し、結果が出たら次の日の学習に追加する実戦形式の検証です。
 
 `outputs/profit_backtest_report.md` は、過去の実オッズを使った損益バックテストです。

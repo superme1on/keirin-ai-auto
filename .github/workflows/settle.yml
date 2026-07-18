@@ -21,6 +21,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -45,21 +47,9 @@ jobs:
         run: |
           python src/update_growth_log.py --kind settle
 
-      - name: Learn from latest settled data
-        env:
-          KEIRIN_HISTORY_CSV_URL: ${{ secrets.KEIRIN_HISTORY_CSV_URL }}
-          HISTORY_MONTHS_BACK: 24
-          HISTORY_MAX_RACES: 10000
-          HISTORY_WORKERS: 8
+      - name: Settle all shadow predictions
         run: |
-          if [ -z "$KEIRIN_HISTORY_CSV_URL" ]; then
-            python src/build_history.py --months-back "$HISTORY_MONTHS_BACK" --max-races "$HISTORY_MAX_RACES" --workers "$HISTORY_WORKERS" --sleep-sec 0 --progress-every 250
-            python src/audit_history.py --fail-on-leakage
-            python src/train.py
-            python src/update_growth_log.py --kind train
-          else
-            echo "KEIRIN_HISTORY_CSV_URL is configured; skip WINTICKET history build"
-          fi
+          python src/settle_shadow.py
 
       - name: Update trial report
         run: |
@@ -76,6 +66,12 @@ jobs:
             outputs/japanese_report.md
             outputs/growth_log.csv
             outputs/trial_report.md
+            outputs/shadow_race_results.csv
+            outputs/shadow_settled_bets.csv
+            outputs/shadow_daily_summary.csv
+            outputs/shadow_bet_type_summary.csv
+            outputs/shadow_overall.json
+            outputs/shadow_report.md
             models/
           retention-days: 30
 
@@ -83,7 +79,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add models outputs/purchase_plan.csv outputs/settled_bets.csv outputs/settlement_summary.csv outputs/japanese_report.md outputs/growth_log.csv outputs/trial_report.md data/raw/history.csv data/raw/history_odds.csv data/raw/history_trifecta_odds.csv data/raw/history_metadata.json || true
+          git add models outputs/purchase_plan.csv outputs/settled_bets.csv outputs/settlement_summary.csv outputs/japanese_report.md outputs/growth_log.csv outputs/trial_report.md outputs/shadow_race_results.csv outputs/shadow_settled_bets.csv outputs/shadow_daily_summary.csv outputs/shadow_bet_type_summary.csv outputs/shadow_overall.json outputs/shadow_report.md || true
           git diff --staged --quiet || git commit -m "Settle keirin predictions"
           git pull --rebase
           git push
