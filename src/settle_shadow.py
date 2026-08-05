@@ -228,9 +228,24 @@ def settle_shadow_rows(bets, results):
     if bets.empty:
         return bets.copy()
     result_frame = results.copy()
-    if not result_frame.empty and "source_url" in result_frame.columns:
-        result_frame = result_frame.rename(columns={"source_url": "result_source_url"})
+    if not result_frame.empty:
+        result_frame = result_frame.rename(
+            columns={
+                "source_url": "result_source_url",
+                "start_at": "result_start_at",
+                "close_at": "result_close_at",
+            }
+        )
     settled = bets.merge(result_frame, on="race_id", how="left")
+    for column in ["start_at", "close_at"]:
+        result_column = f"result_{column}"
+        prediction_value = pd.to_numeric(settled.get(column, np.nan), errors="coerce")
+        result_value = pd.to_numeric(settled.get(result_column, np.nan), errors="coerce")
+        if not isinstance(prediction_value, pd.Series):
+            prediction_value = pd.Series(np.nan, index=settled.index, dtype=float)
+        if not isinstance(result_value, pd.Series):
+            result_value = pd.Series(np.nan, index=settled.index, dtype=float)
+        settled[column] = prediction_value.combine_first(result_value)
     if "bet_type" not in settled.columns:
         settled["bet_type"] = "trifecta"
     settled["actual_for_bet_type"] = settled.apply(

@@ -27,6 +27,7 @@ class ShadowSettlementTests(unittest.TestCase):
                     "stake_yen": 300,
                     "return_if_hit_yen": 99999,
                     "prediction_created_at_jst": "2026-07-11T10:00:00+09:00",
+                    "close_at": 1783735200,
                 }
             ]
         )
