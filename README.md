@@ -102,6 +102,10 @@ BET_BASE_STAKE_YEN=100 BET_MAX_STAKE_YEN=500 python src/predict.py
 
 `outputs/shadow_report.md` は、購入停止中に記録した影予想を公式払戻で精算した日別・券種別の成長記録です。`outputs/shadow_daily_summary.csv` に日別損益、`outputs/shadow_settled_bets.csv` に全買い目の勝敗を追記します。
 
+朝の低流動性オッズを期待値判定に使わないため、`intraday-keirin-odds` は締切5〜40分前のレースだけを再取得します。旧方式と新方式の成績は `outputs/shadow_strategy_summary.csv` で分けて確認できます。
+
+週次再学習モデルは `models/candidate_win_model.joblib` として保存します。外部検証を通過するまで `models/win_model.joblib` は自動で置き換えません。
+
 `outputs/walk_forward_summary.csv` は、結果を見ずに日付順で予想し、結果が出たら次の日の学習に追加する実戦形式の検証です。
 
 `outputs/profit_backtest_report.md` は、過去の実オッズを使った損益バックテストです。

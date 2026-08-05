@@ -177,8 +177,14 @@ def add_today_prior_features(df):
 def main():
     ensure_dirs()
     ensure_ready()
+    now_jst = datetime.now(ZoneInfo("Asia/Tokyo"))
+    prediction_epoch = now_jst.timestamp()
     base_stake_yen = get_int_env("BET_BASE_STAKE_YEN", get_stake_yen())
     max_stake_yen = get_int_env("BET_MAX_STAKE_YEN", 500)
+    max_seconds_to_close = get_int_env("BET_MAX_SECONDS_TO_CLOSE", 3600)
+    snapshot_mode = os.getenv("PREDICTION_SNAPSHOT_MODE", "false").strip().lower() in {"1", "true", "yes"}
+    strategy_version = os.getenv("PREDICTION_STRATEGY_VERSION", "near_close_v2_20260805").strip()
+    odds_snapshot_label = os.getenv("ODDS_SNAPSHOT_LABEL", "near-close snapshot").strip()
     profit_gate = load_profit_gate()
 
     bundle = joblib.load(MODEL_PATH)
@@ -210,8 +216,9 @@ def main():
     sort_cols = ["date", "venue", "race_no", "rank_in_race"]
     pred = pred.sort_values(sort_cols)
 
-    today_jst = datetime.now(ZoneInfo("Asia/Tokyo")).strftime("%Y%m%d")
-    pred_path = OUTPUT_DIR / f"predictions_{today_jst}.csv"
+    today_jst = now_jst.strftime("%Y%m%d")
+    output_tag = now_jst.strftime("%Y%m%d_%H%M%S") if snapshot_mode else today_jst
+    pred_path = OUTPUT_DIR / f"predictions_{output_tag}.csv"
     latest_path = OUTPUT_DIR / "latest_predictions.csv"
 
     cols = [
@@ -232,7 +239,8 @@ def main():
     for race_id, g in pred.groupby("race_id", sort=False):
         base = g.iloc[0]
         close_at = pd.to_numeric(base.get("close_at", np.nan), errors="coerce")
-        if pd.isna(close_at) or close_at <= datetime.now(ZoneInfo("Asia/Tokyo")).timestamp() + 300:
+        seconds_to_close = close_at - prediction_epoch if pd.notna(close_at) else np.nan
+        if pd.isna(seconds_to_close) or seconds_to_close <= 300 or seconds_to_close > max_seconds_to_close:
             continue
         candidates = make_multi_bet_candidates(g, top_k=5)
         race_odds = today_odds[today_odds["race_id"].eq(str(race_id))]
@@ -252,6 +260,8 @@ def main():
                 "race_id": race_id,
                 "start_at": base.get("start_at", np.nan),
                 "close_at": close_at,
+                "seconds_to_close_at_prediction": round(float(seconds_to_close)),
+                "strategy_version": strategy_version,
                 "bet_type": cand["bet_type"],
                 "bet_label": BET_LABELS.get(cand["bet_type"], cand["bet_type"]),
                 "candidate_rank": int(cand["candidate_rank"]),
@@ -293,16 +303,16 @@ def main():
         shadow_bets["purchase_authorized"] = bool(profit_gate["target_passed"])
         shadow_bets["authorization_reason"] = profit_gate["reason"]
         shadow_bets["model_sha256"] = file_sha256(MODEL_PATH)
-        shadow_bets["prediction_created_at_jst"] = datetime.now(ZoneInfo("Asia/Tokyo")).isoformat(timespec="seconds")
-        shadow_bets["odds_snapshot"] = "daily morning snapshot"
-    shadow_path = OUTPUT_DIR / f"shadow_bets_{today_jst}.csv"
+        shadow_bets["prediction_created_at_jst"] = now_jst.isoformat(timespec="seconds")
+        shadow_bets["odds_snapshot"] = odds_snapshot_label
+    shadow_path = OUTPUT_DIR / f"shadow_bets_{output_tag}.csv"
     latest_shadow_path = OUTPUT_DIR / "latest_shadow_bets.csv"
     shadow_bets.to_csv(shadow_path, index=False)
     shadow_bets.to_csv(latest_shadow_path, index=False)
     if not profit_gate["target_passed"]:
         bets = bets.head(0).copy()
 
-    bets_path = OUTPUT_DIR / f"bets_{today_jst}.csv"
+    bets_path = OUTPUT_DIR / f"bets_{output_tag}.csv"
     latest_bets_path = OUTPUT_DIR / "latest_bets.csv"
     latest_candidates_path = OUTPUT_DIR / "latest_bet_candidates.csv"
     candidates.to_csv(latest_candidates_path, index=False)
@@ -349,6 +359,9 @@ def main():
         "n_races": int(pred["race_id"].nunique()),
         "base_stake_yen": base_stake_yen,
         "max_stake_yen": max_stake_yen,
+        "max_seconds_to_close": max_seconds_to_close,
+        "strategy_version": strategy_version,
+        "snapshot_mode": snapshot_mode,
         "selected_bets": int(len(bets)),
         "shadow_selected_bets": int(len(shadow_bets)),
         "profit_gate": profit_gate,

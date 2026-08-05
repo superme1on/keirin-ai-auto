@@ -1,0 +1,72 @@
+name: intraday-keirin-odds
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Every 30 minutes from 07:00 through 22:59 JST.
+    - cron: "0,30 0-13,22-23 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: keirin-repo-writer
+  cancel-in-progress: false
+
+jobs:
+  predict-near-close:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Fetch races near close
+        id: upcoming
+        run: |
+          python src/fetch_upcoming_entries.py --min-minutes 5 --max-minutes 40
+          echo "count=$(cat data/raw/upcoming_races_count.txt)" >> "$GITHUB_OUTPUT"
+
+      - name: Predict with near-close odds
+        if: steps.upcoming.outputs.count != '0'
+        env:
+          BET_BASE_STAKE_YEN: 100
+          BET_MAX_STAKE_YEN: 100
+          BET_MAX_SECONDS_TO_CLOSE: 2400
+          PREDICTION_SNAPSHOT_MODE: true
+          PREDICTION_STRATEGY_VERSION: near_close_v2_20260805
+          ODDS_SNAPSHOT_LABEL: 5-40 minutes before close
+        run: |
+          python src/predict.py
+
+      - name: Upload snapshot
+        if: steps.upcoming.outputs.count != '0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: keirin-near-close-${{ github.run_id }}
+          path: outputs/
+          retention-days: 30
+
+      - name: Commit snapshot
+        if: steps.upcoming.outputs.count != '0'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add outputs || true
+          git diff --staged --quiet || git commit -m "Add near-close keirin snapshot"
+          git pull --rebase
+          git push

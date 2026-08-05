@@ -22,6 +22,7 @@ RESULT_CACHE_CSV = OUTPUT_DIR / "shadow_race_results.csv"
 SETTLED_CSV = OUTPUT_DIR / "shadow_settled_bets.csv"
 DAILY_SUMMARY_CSV = OUTPUT_DIR / "shadow_daily_summary.csv"
 BET_TYPE_SUMMARY_CSV = OUTPUT_DIR / "shadow_bet_type_summary.csv"
+STRATEGY_SUMMARY_CSV = OUTPUT_DIR / "shadow_strategy_summary.csv"
 OVERALL_JSON = OUTPUT_DIR / "shadow_overall.json"
 REPORT_MD = OUTPUT_DIR / "shadow_report.md"
 TARGET_ROI = 0.50
@@ -84,6 +85,10 @@ def load_shadow_bets(start_date=None, end_date=None):
             frame["prediction_created_at_jst"] = created_at
         else:
             frame["prediction_created_at_jst"] = frame["prediction_created_at_jst"].fillna("").replace("", created_at)
+        if "strategy_version" not in frame.columns:
+            frame["strategy_version"] = "morning_odds_legacy_v1"
+        else:
+            frame["strategy_version"] = frame["strategy_version"].fillna("morning_odds_legacy_v1")
         frames.append(frame)
     if not frames:
         return pd.DataFrame()
@@ -335,14 +340,19 @@ def build_summaries(settled):
             }
         )
     bet_types = pd.DataFrame(bet_type_rows)
-    return daily, bet_types
+
+    strategy_rows = []
+    for strategy, group in settled.groupby("strategy_version", sort=True, dropna=False):
+        strategy_rows.append({"strategy_version": strategy, **summarize_rows(group)})
+    strategies = pd.DataFrame(strategy_rows)
+    return daily, bet_types, strategies
 
 
 def fmt_pct(value):
     return "-" if value is None or pd.isna(value) else f"{float(value):.2%}"
 
 
-def build_report(overall, daily, bet_types, settled):
+def build_report(overall, daily, bet_types, strategies, settled):
     generated = overall["generated_at_jst"]
     lines = [
         "# 競輪AI 影予想 成長記録",
@@ -397,6 +407,20 @@ def build_report(overall, daily, bet_types, settled):
             f"{int(row['profit_yen']):,}円 | {fmt_pct(row['roi'])} |"
         )
 
+    lines += [
+        "",
+        "## 戦略別",
+        "",
+        "| 戦略 | 確定 | 的中 | 購入 | 払戻 | 損益 | ROI |",
+        "|---|---:|---:|---:|---:|---:|---:|",
+    ]
+    for _, row in strategies.sort_values("strategy_version").iterrows():
+        lines.append(
+            f"| {row['strategy_version']} | {int(row['bets_decided'])} | {int(row['hits'])} | "
+            f"{int(row['stake_yen']):,}円 | {int(row['return_yen']):,}円 | "
+            f"{int(row['profit_yen']):,}円 | {fmt_pct(row['roi'])} |"
+        )
+
     hits = settled[
         settled["is_prospective"] & settled["is_decided"] & settled["is_hit"]
     ].sort_values(["date", "venue", "race_no"])
@@ -419,7 +443,7 @@ def build_report(overall, daily, bet_types, settled):
 
     lines += [
         "",
-        "朝取得したオッズでの影予想です。締切直前オッズとのずれがあるため、この記録だけで実購入は許可しません。",
+        "旧方式は朝オッズ、新方式は締切5〜40分前のオッズです。戦略を混ぜずに評価し、実購入は外部ゲート合格まで許可しません。",
     ]
     return "\n".join(lines) + "\n"
 
@@ -435,9 +459,10 @@ def run(args):
     settled = settle_shadow_rows(bets, results)
     settled.to_csv(SETTLED_CSV, index=False)
 
-    daily, bet_types = build_summaries(settled)
+    daily, bet_types, strategies = build_summaries(settled)
     daily.to_csv(DAILY_SUMMARY_CSV, index=False)
     bet_types.to_csv(BET_TYPE_SUMMARY_CSV, index=False)
+    strategies.to_csv(STRATEGY_SUMMARY_CSV, index=False)
 
     summary = summarize_rows(settled)
     generated = datetime.now(ZoneInfo("Asia/Tokyo")).isoformat(timespec="seconds")
@@ -454,7 +479,7 @@ def run(args):
         "failures": resolve_failures + result_failures,
     }
     OVERALL_JSON.write_text(json.dumps(overall, ensure_ascii=False, indent=2), encoding="utf-8")
-    REPORT_MD.write_text(build_report(overall, daily, bet_types, settled), encoding="utf-8")
+    REPORT_MD.write_text(build_report(overall, daily, bet_types, strategies, settled), encoding="utf-8")
 
     print(json.dumps(overall, ensure_ascii=False, indent=2))
     print(f"saved: {SETTLED_CSV}")

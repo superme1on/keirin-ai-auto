@@ -11,12 +11,13 @@ import numpy as np
 import pandas as pd
 import requests
 
-from common import ensure_dirs, RAW_DIR, TODAY_CSV, TODAY_ODDS_CSV
+from common import ensure_dirs, OUTPUT_DIR, RAW_DIR, TODAY_CSV, TODAY_ODDS_CSV
 from race_features import build_entry_rows
 
 BASE_URL = "https://www.winticket.jp"
 RACECARD_URL = f"{BASE_URL}/keirin/racecard"
 TRIFECTA_ODDS_CSV = RAW_DIR / "today_trifecta_odds.csv"
+RACE_SCHEDULE_CSV = OUTPUT_DIR / "latest_race_schedule.csv"
 ODDS_COLUMNS = [
     "date",
     "venue",
@@ -210,6 +211,25 @@ def parse_race_page(url):
     return entry_rows, odds_rows
 
 
+def save_today_frames(all_entries, all_odds):
+    entries_df = pd.DataFrame(all_entries).sort_values(["date", "venue", "race_no", "car_no"])
+    entries_df.to_csv(TODAY_CSV, index=False)
+
+    odds_df = pd.DataFrame(all_odds, columns=ODDS_COLUMNS)
+    if len(odds_df):
+        odds_df = odds_df.sort_values(["date", "venue", "race_no", "bet_type", "popularity_order", "buy"])
+    odds_df.to_csv(TODAY_ODDS_CSV, index=False)
+
+    trifecta_df = odds_df[odds_df["bet_type"].eq("trifecta")].copy() if len(odds_df) else pd.DataFrame(columns=ODDS_COLUMNS)
+    if len(trifecta_df):
+        trifecta_df["trifecta_odds"] = trifecta_df["odds_used"]
+        trifecta_df = trifecta_df[TRIFECTA_ODDS_COLUMNS]
+    else:
+        trifecta_df = pd.DataFrame(columns=TRIFECTA_ODDS_COLUMNS)
+    trifecta_df.to_csv(TRIFECTA_ODDS_CSV, index=False)
+    return entries_df, odds_df, trifecta_df
+
+
 def fetch_today_entries(race_date=None, max_races=None, sleep_sec=0.2):
     ensure_dirs()
     race_date = race_date or datetime.now(ZoneInfo("Asia/Tokyo")).strftime("%Y-%m-%d")
@@ -242,21 +262,11 @@ def fetch_today_entries(race_date=None, max_races=None, sleep_sec=0.2):
     if not all_entries:
         raise ValueError(f"failed to fetch any entries for {race_date}: {failures[:3]}")
 
-    entries_df = pd.DataFrame(all_entries).sort_values(["date", "venue", "race_no", "car_no"])
-    entries_df.to_csv(TODAY_CSV, index=False)
-
-    odds_df = pd.DataFrame(all_odds, columns=ODDS_COLUMNS)
-    if len(odds_df):
-        odds_df = odds_df.sort_values(["date", "venue", "race_no", "bet_type", "popularity_order", "buy"])
-    odds_df.to_csv(TODAY_ODDS_CSV, index=False)
-
-    trifecta_df = odds_df[odds_df["bet_type"].eq("trifecta")].copy() if len(odds_df) else pd.DataFrame(columns=ODDS_COLUMNS)
-    if len(trifecta_df):
-        trifecta_df["trifecta_odds"] = trifecta_df["odds_used"]
-        trifecta_df = trifecta_df[TRIFECTA_ODDS_COLUMNS]
-    else:
-        trifecta_df = pd.DataFrame(columns=TRIFECTA_ODDS_COLUMNS)
-    trifecta_df.to_csv(TRIFECTA_ODDS_CSV, index=False)
+    entries_df, odds_df, trifecta_df = save_today_frames(all_entries, all_odds)
+    schedule_columns = ["date", "venue", "race_no", "race_id", "start_at", "close_at", "source_url"]
+    schedule = entries_df[schedule_columns].drop_duplicates("race_id").sort_values(["date", "close_at", "venue", "race_no"])
+    schedule["schedule_fetched_at_jst"] = datetime.now(ZoneInfo("Asia/Tokyo")).isoformat(timespec="seconds")
+    schedule.to_csv(RACE_SCHEDULE_CSV, index=False)
 
     metadata = {
         "source": "WINTICKET racecard",
@@ -269,6 +279,7 @@ def fetch_today_entries(race_date=None, max_races=None, sleep_sec=0.2):
         "bet_types": sorted(odds_df["bet_type"].dropna().unique().tolist()) if len(odds_df) else [],
         "trifecta_odds_rows": int(len(trifecta_df)),
         "failures": failures,
+        "race_schedule": str(RACE_SCHEDULE_CSV),
     }
     (RAW_DIR / "today_entries_metadata.json").write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(metadata, ensure_ascii=False, indent=2))

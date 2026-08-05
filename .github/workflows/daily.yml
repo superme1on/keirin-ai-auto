@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: daily-keirin-predict
+  group: keirin-repo-writer
   cancel-in-progress: false
 
 jobs:
@@ -64,6 +64,12 @@ jobs:
           fi
 
       - name: Predict
+        env:
+          BET_BASE_STAKE_YEN: 100
+          BET_MAX_STAKE_YEN: 100
+          BET_MAX_SECONDS_TO_CLOSE: 3600
+          PREDICTION_STRATEGY_VERSION: near_close_v2_20260805
+          ODDS_SNAPSHOT_LABEL: near-close snapshot
         run: |
           python src/predict.py
 

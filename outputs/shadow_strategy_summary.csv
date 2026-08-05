@@ -1,0 +1,2 @@
+strategy_version,bets_recorded,bets_total,bets_decided,bets_pending,bets_excluded_after_close,bets_excluded_unknown_time,hits,hit_rate,stake_yen,return_yen,profit_yen,return_rate,roi
+morning_odds_legacy_v1,214,212,210,2,2,0,12,0.05714285714285714,77400,25910,-51490,0.33475452196382427,-0.6652454780361757
