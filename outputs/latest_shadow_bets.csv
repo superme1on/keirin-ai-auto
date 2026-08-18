@@ -1,1 +1,1 @@
-date,venue,race_no,race_id,start_at,close_at,seconds_to_close_at_prediction,strategy_version,bet_type,bet_label,candidate_rank,buy,prob,odds_used,expected_profit_100yen,is_selected
+date,venue,race_no,race_id,bet_type,bet_label,candidate_rank,buy
