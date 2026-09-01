@@ -1,12 +1,12 @@
 {
-  "trained_at_jst": "2026-08-17T05:56:51+09:00",
+  "trained_at_jst": "2026-09-01T18:40:32+09:00",
   "model": "HistGradientBoostingClassifier + race probability normalization",
-  "n_rows": 7022,
-  "n_train": 4746,
-  "n_calib": 853,
-  "n_test": 1423,
-  "n_races": 994,
-  "production_n_train": 7022,
+  "n_rows": 4316,
+  "n_train": 3226,
+  "n_calib": 601,
+  "n_test": 489,
+  "n_races": 617,
+  "production_n_train": 4316,
   "features": [
     "race_no",
     "car_no",
@@ -103,10 +103,10 @@
     "gender_code",
     "player_id_code"
   ],
-  "brier_score_binary": 0.10860567831029977,
-  "auc_binary": 0.7883045061262883,
-  "race_logloss": 1.6222652280802439,
-  "top1_hit_rate": 0.37623762376237624,
+  "brier_score_binary": 0.10691353769547346,
+  "auc_binary": 0.7870610296624616,
+  "race_logloss": 1.5339631089201424,
+  "top1_hit_rate": 0.4142857142857143,
   "stake_yen": 100,
   "backtest": [
     {
