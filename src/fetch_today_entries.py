@@ -1,6 +1,9 @@
 import argparse
 import json
+import os
+import random
 import re
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -44,15 +47,55 @@ BET_SPECS = {
 }
 
 
-def http_get(url):
+_HTTP_RATE_LOCK = threading.Lock()
+_HTTP_NEXT_REQUEST_AT = 0.0
+
+
+def wait_for_http_slot():
+    global _HTTP_NEXT_REQUEST_AT
+    try:
+        interval = max(float(os.getenv("WINTICKET_MIN_REQUEST_INTERVAL_SEC", "0.25")), 0.0)
+    except ValueError:
+        interval = 0.25
+    if interval == 0:
+        return
+    with _HTTP_RATE_LOCK:
+        now = time.monotonic()
+        request_at = max(now, _HTTP_NEXT_REQUEST_AT)
+        _HTTP_NEXT_REQUEST_AT = request_at + interval
+    delay = request_at - now
+    if delay > 0:
+        time.sleep(delay)
+
+
+def http_get(url, attempts=7):
     headers = {
         "User-Agent": "Mozilla/5.0 (compatible; keirin-ai-auto/1.0)",
         "Accept-Language": "ja,en;q=0.8",
     }
-    r = requests.get(url, headers=headers, timeout=30)
-    r.raise_for_status()
-    r.encoding = "utf-8"
-    return r.text
+    attempts = max(int(attempts), 1)
+    for attempt in range(attempts):
+        wait_for_http_slot()
+        response = requests.get(url, headers=headers, timeout=30)
+        retryable = response.status_code == 429 or 500 <= response.status_code < 600
+        if retryable and attempt + 1 < attempts:
+            retry_after = response.headers.get("Retry-After", "")
+            try:
+                wait_seconds = max(float(retry_after), 0.0)
+            except ValueError:
+                wait_seconds = 0.0
+            wait_seconds = max(wait_seconds, min(2**attempt, 30)) + random.uniform(0.0, 0.5)
+            print(
+                f"retry http {response.status_code}: attempt={attempt + 1}/{attempts} "
+                f"wait={wait_seconds:.1f}s url={url}",
+                flush=True,
+            )
+            time.sleep(wait_seconds)
+            continue
+        response.raise_for_status()
+        response.encoding = "utf-8"
+        return response.text
+    raise RuntimeError(f"unreachable HTTP retry state: {url}")
 
 
 def extract_preloaded_state(html):

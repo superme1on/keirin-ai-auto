@@ -355,6 +355,7 @@ def build_history(
     progress_every=1,
     sample_mod=None,
     sample_offset=0,
+    min_races=None,
 ):
     ensure_dirs()
     cups = collect_cups(months_back=months_back)
@@ -364,6 +365,11 @@ def build_history(
         raise ValueError("no past cups found")
 
     all_race_urls, failures = collect_all_race_urls(cups, workers=workers, progress_every=progress_every)
+    if min_races and len(all_race_urls) < int(min_races):
+        raise ValueError(
+            f"history coverage too small before race fetch: found={len(all_race_urls)} "
+            f"required={int(min_races)} cup_failures={len(failures)}"
+        )
     if sample_mod:
         sample_mod = int(sample_mod)
         sample_offset = int(sample_offset)
@@ -390,6 +396,12 @@ def build_history(
 
     df = pd.DataFrame(all_rows)
     df = df.drop_duplicates(["race_id", "player_id"]).sort_values(["date", "venue", "race_no", "car_no"])
+    fetched_races = int(df["race_id"].nunique())
+    if min_races and fetched_races < int(min_races):
+        raise ValueError(
+            f"history coverage too small after race fetch: found={fetched_races} "
+            f"required={int(min_races)} total_failures={len(failures)}"
+        )
     df.to_csv(HISTORY_CSV, index=False)
 
     odds_df = pd.DataFrame(all_odds_rows, columns=ODDS_COLUMNS)
@@ -436,6 +448,7 @@ def main():
     parser.add_argument("--months-back", type=int, default=1)
     parser.add_argument("--max-cups", type=int, default=None)
     parser.add_argument("--max-races", type=int, default=None)
+    parser.add_argument("--min-races", type=int, default=None)
     parser.add_argument("--sleep-sec", type=float, default=0.2)
     parser.add_argument("--no-cache", action="store_true")
     parser.add_argument("--workers", type=int, default=1)
@@ -444,15 +457,16 @@ def main():
     parser.add_argument("--sample-offset", type=int, default=0)
     args = parser.parse_args()
     build_history(
-        args.months_back,
-        args.max_cups,
-        args.max_races,
-        args.sleep_sec,
-        not args.no_cache,
-        args.workers,
-        args.progress_every,
-        args.sample_mod,
-        args.sample_offset,
+        months_back=args.months_back,
+        max_cups=args.max_cups,
+        max_races=args.max_races,
+        sleep_sec=args.sleep_sec,
+        use_cache=not args.no_cache,
+        workers=args.workers,
+        progress_every=args.progress_every,
+        sample_mod=args.sample_mod,
+        sample_offset=args.sample_offset,
+        min_races=args.min_races,
     )
 
 

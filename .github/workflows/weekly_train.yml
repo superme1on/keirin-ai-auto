@@ -44,11 +44,13 @@ jobs:
         env:
           KEIRIN_HISTORY_CSV_URL: ${{ secrets.KEIRIN_HISTORY_CSV_URL }}
           HISTORY_MONTHS_BACK: 24
-          HISTORY_MAX_RACES: 10000
+          HISTORY_MAX_RACES: 5000
+          HISTORY_MIN_RACES: 4500
           HISTORY_WORKERS: 8
+          WINTICKET_MIN_REQUEST_INTERVAL_SEC: 0.25
         run: |
           if [ -z "$KEIRIN_HISTORY_CSV_URL" ]; then
-            python src/build_history.py --months-back "$HISTORY_MONTHS_BACK" --max-races "$HISTORY_MAX_RACES" --workers "$HISTORY_WORKERS" --sleep-sec 0 --progress-every 250
+            python src/build_history.py --months-back "$HISTORY_MONTHS_BACK" --max-races "$HISTORY_MAX_RACES" --min-races "$HISTORY_MIN_RACES" --workers "$HISTORY_WORKERS" --sleep-sec 0 --progress-every 250
           else
             echo "KEIRIN_HISTORY_CSV_URL is configured; skip WINTICKET history build"
           fi
