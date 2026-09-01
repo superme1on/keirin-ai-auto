@@ -32,6 +32,14 @@ def add_months(dt, months):
     return dt.replace(year=y, month=m, day=1)
 
 
+def extract_cup_url_by_id(html):
+    links = re.findall(r'href="(/keirin/[^/]+/racecard/\d{10})(?:/races)?"', html)
+    return {
+        href.rstrip("/").split("/")[-1]: urljoin(BASE_URL, href)
+        for href in links
+    }
+
+
 def extract_month_cups(year_month):
     url = f"{BASE_URL}/keirin/schedules/{year_month}"
     html = http_get(url)
@@ -47,11 +55,7 @@ def extract_month_cups(year_month):
         # WINTICKET URLs use English slugs, but the schedule HTML contains the full cup link.
         rows.append({**cup, "venue_name": venue.get("name", ""), "source_month_url": url})
 
-    links = re.findall(r'href="(/keirin/[^/]+/racecard/\d{10})"', html)
-    cup_url_by_id = {}
-    for href in links:
-        cup_id = href.rstrip("/").split("/")[-1]
-        cup_url_by_id[cup_id] = urljoin(BASE_URL, href)
+    cup_url_by_id = extract_cup_url_by_id(html)
     for row in rows:
         row["cup_url"] = cup_url_by_id.get(str(row.get("id")), "")
     return rows

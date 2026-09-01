@@ -211,7 +211,10 @@ def build_report(selected, summary):
         "| 日付 | 場 | R | 券種 | 買い目 | 確率 | オッズ | 期待利益 | 結果 | 損益 |",
         "|---|---:|---:|---|---:|---:|---:|---:|---|---:|",
     ]
-    top = selected.sort_values(["date", "venue", "race_no", "candidate_rank"]).head(50)
+    if selected.empty:
+        top = selected
+    else:
+        top = selected.sort_values(["date", "venue", "race_no", "candidate_rank"]).head(50)
     for _, row in top.iterrows():
         if not bool(row.get("is_decided", False)):
             result = "未確定"
@@ -230,32 +233,54 @@ def build_report(selected, summary):
     return "\n".join(lines) + "\n"
 
 
+def normalize_bets_for_settlement(bets):
+    normalized = bets.copy()
+    defaults = {
+        "bet_type": "trifecta",
+        "buy": "",
+        "expected_profit_yen": np.nan,
+        "stake_yen": 0,
+        "return_if_hit_yen": 0,
+    }
+    for column, default in defaults.items():
+        if column not in normalized.columns:
+            normalized[column] = default
+    return normalized
+
+
 def run_settlement(args):
     ensure_dirs()
-    results = fetch_results()
     bets = pd.read_csv(LATEST_BETS_CSV, dtype={"race_id": str})
-    if "bet_type" not in bets.columns:
-        bets["bet_type"] = "trifecta"
+    bets = normalize_bets_for_settlement(bets)
 
-    settled = bets.merge(results, on="race_id", how="left")
-    settled["is_selected"] = pd.to_numeric(settled["expected_profit_yen"], errors="coerce").fillna(-10**9) > args.min_expected_profit
-    settled["actual_for_bet_type"] = settled.apply(
-        lambda row: row.get(f"actual_{row.get('bet_type', 'trifecta')}", row.get("actual_trifecta", "")),
-        axis=1,
-    )
-    settled["is_decided"] = settled["actual_for_bet_type"].fillna("").astype(str).str.len().gt(0)
-    settled["is_hit"] = settled.apply(
-        lambda row: bool(row["is_decided"]) and str(row["buy"]) in str(row.get("actual_for_bet_type", "")).split("|"),
-        axis=1,
-    )
-    return_col = "return_if_hit_yen" if "return_if_hit_yen" in settled.columns else "trifecta_return_yen"
-    payout_if_hit = pd.to_numeric(settled.get(return_col, 0), errors="coerce").fillna(0)
-    stake = pd.to_numeric(settled["stake_yen"], errors="coerce").fillna(0)
-    settled["actual_return_yen"] = [
-        settled_return_yen(row, fallback)
-        for (_, row), fallback in zip(settled.iterrows(), payout_if_hit.to_numpy())
-    ]
-    settled["actual_profit_yen"] = np.where(settled["is_decided"], settled["actual_return_yen"] - stake, np.nan)
+    if bets.empty:
+        settled = bets.copy()
+        settled["is_selected"] = pd.Series(index=settled.index, dtype=bool)
+        settled["actual_for_bet_type"] = pd.Series(index=settled.index, dtype=object)
+        settled["is_decided"] = pd.Series(index=settled.index, dtype=bool)
+        settled["is_hit"] = pd.Series(index=settled.index, dtype=bool)
+        settled["actual_return_yen"] = pd.Series(index=settled.index, dtype=float)
+        settled["actual_profit_yen"] = pd.Series(index=settled.index, dtype=float)
+    else:
+        results = fetch_results()
+        settled = bets.merge(results, on="race_id", how="left")
+        settled["is_selected"] = pd.to_numeric(settled["expected_profit_yen"], errors="coerce").fillna(-10**9) > args.min_expected_profit
+        settled["actual_for_bet_type"] = settled.apply(
+            lambda row: row.get(f"actual_{row.get('bet_type', 'trifecta')}", row.get("actual_trifecta", "")),
+            axis=1,
+        )
+        settled["is_decided"] = settled["actual_for_bet_type"].fillna("").astype(str).str.len().gt(0)
+        settled["is_hit"] = settled.apply(
+            lambda row: bool(row["is_decided"]) and str(row["buy"]) in str(row.get("actual_for_bet_type", "")).split("|"),
+            axis=1,
+        )
+        payout_if_hit = pd.to_numeric(settled["return_if_hit_yen"], errors="coerce").fillna(0)
+        stake = pd.to_numeric(settled["stake_yen"], errors="coerce").fillna(0)
+        settled["actual_return_yen"] = [
+            settled_return_yen(row, fallback)
+            for (_, row), fallback in zip(settled.iterrows(), payout_if_hit.to_numpy())
+        ]
+        settled["actual_profit_yen"] = np.where(settled["is_decided"], settled["actual_return_yen"] - stake, np.nan)
     settled.to_csv(SETTLED_BETS_CSV, index=False)
 
     selected = settled[settled["is_selected"]].copy()
