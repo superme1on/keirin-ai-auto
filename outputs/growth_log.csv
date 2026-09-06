@@ -51,3 +51,5 @@ logged_at_jst,kind,target_date,history_rows,history_races,auc_binary,brier_score
 2026-09-05T02:42:47+09:00,settle,2026-09-04,,,,,,,,,0.0,0.0,0.0,0.0,0.0,,AI purchase settlement
 2026-09-06T01:54:32+09:00,settle,2026-09-05,,,,,,,,,0.0,0.0,0.0,0.0,0.0,,AI purchase settlement
 2026-09-07T02:12:50+09:00,settle,2026-09-06,,,,,,,,,0.0,0.0,0.0,0.0,0.0,,AI purchase settlement
+2026-09-07T08:01:35+09:00,train,2026-09-06,35497.0,4999.0,0.800880087099586,0.1012112479365287,1.5307687980753937,0.0,0.0,,,,,,,,WINTICKET history training metrics
+2026-09-07T08:04:40+09:00,multi_bet_backtest,2026-09-06,,4999.0,,,,,,,22096.0,483.0,3169300.0,2078320.0,-1090980.0,-0.3442337424667908,"best broad bet type: 枠複, profit_yen=0"
