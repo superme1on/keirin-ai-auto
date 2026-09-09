@@ -55,3 +55,4 @@ logged_at_jst,kind,target_date,history_rows,history_races,auc_binary,brier_score
 2026-09-07T08:04:40+09:00,multi_bet_backtest,2026-09-06,,4999.0,,,,,,,22096.0,483.0,3169300.0,2078320.0,-1090980.0,-0.3442337424667908,"best broad bet type: 枠複, profit_yen=0"
 2026-09-08T03:48:35+09:00,settle,2026-09-07,,,,,,,,,0.0,0.0,0.0,0.0,0.0,,AI purchase settlement
 2026-09-09T02:59:50+09:00,settle,2026-09-08,,,,,,,,,0.0,0.0,0.0,0.0,0.0,,AI purchase settlement
+2026-09-10T02:54:42+09:00,settle,2026-09-09,,,,,,,,,0.0,0.0,0.0,0.0,0.0,,AI purchase settlement
