@@ -86,3 +86,4 @@ logged_at_jst,kind,target_date,history_rows,history_races,auc_binary,brier_score
 2026-10-02T04:40:54+09:00,settle,2026-10-01,,,,,,,,,0.0,0.0,0.0,0.0,0.0,,AI purchase settlement
 2026-10-03T04:26:41+09:00,settle,2026-10-02,,,,,,,,,0.0,0.0,0.0,0.0,0.0,,AI purchase settlement
 2026-10-04T03:05:17+09:00,settle,2026-10-03,,,,,,,,,0.0,0.0,0.0,0.0,0.0,,AI purchase settlement
+2026-10-05T03:16:06+09:00,settle,2026-10-04,,,,,,,,,0.0,0.0,0.0,0.0,0.0,,AI purchase settlement
